@@ -1,6 +1,6 @@
 {
   "name": "gladys-octopus-germany",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Octopus Energy Germany for Gladys Assistant: tariffs (fixed, time-of-use, dynamic), smart-meter consumption and Intelligent Octopus planned charges, read from the official Kraken API with your account. Read-only. Unofficial, not affiliated with Octopus Energy.",
   "type": "module",

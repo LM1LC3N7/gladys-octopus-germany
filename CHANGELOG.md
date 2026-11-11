@@ -10,6 +10,8 @@ the notes of the version's GitHub Release.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-11
+
 ### Added
 
 - First version: the Octopus Energy Germany account read through the official
@@ -27,3 +29,6 @@ the notes of the version's GitHub Release.
 - The API key is the recommended login; the e-mail and password login, which
   Kraken deprecated, says clearly when Octopus no longer accepts it.
 - Device ids are an HMAC of the MaLo under a key kept in the Gladys config.
+
+[Unreleased]: https://github.com/LM1LC3N7/gladys-octopus-germany/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/LM1LC3N7/gladys-octopus-germany/releases/tag/v0.1.1
