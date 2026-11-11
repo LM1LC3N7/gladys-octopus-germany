@@ -454,5 +454,11 @@
     "file": "src/app.js",
     "from": "if (parts?.whole) throw new KrakenError('partial', { kt: ktOf(errors) });",
     "to": ""
+  },
+  {
+    "name": "key status announces the key spacing, not the next read",
+    "file": "src/app.js",
+    "from": ", (this.dueMono ?? mono) - mono);",
+    "to": ");"
   }
 ]

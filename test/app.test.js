@@ -757,6 +757,14 @@ test('r2 I1: the id key not stored: spaced tries, no storm, a status naming Glad
   assert.equal(env.kraken.count('account'), 0);
   assert.deepEqual(env.fake.discoveredDevices, []);
   assert.match(statusText(env), /Gladys could not store the key of the device ids/);
+  // The time said is the real next try: the next read of the account, 5 minutes later.
+  assert.match(statusText(env), /Next try at 10:12\./);
+  const tries = calls;
+  await env.wait(4 * MINUTE + 50 * 1000);
+  assert.equal(calls, tries, 'nothing before the time said');
+  await env.wait(20 * 1000);
+  assert.equal(calls, tries + 1, 'tried at the time said');
+  assert.match(statusText(env), /Next try at 10:22\./);
   await env.wait(10 * MINUTE);
   assert.ok(calls >= 2 && calls <= 8, `${calls} setConfig in 10 minutes`);
   assert.ok(env.lines.length <= 2 * calls + 4, `${env.lines.length} log lines`);

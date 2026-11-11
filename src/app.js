@@ -1343,7 +1343,10 @@ export class OctopusApp {
   statusNow() {
     if (this.config.problem) return [false, both(this.config.problem)];
     if (!this.idKey && this.idKeyFailures > 0) {
-      const wait = Math.max(0, (this.idKeyDue ?? this.monotonic()) - this.monotonic());
+      // The next try is the next read of the account (5, 10, 20, 40 then every
+      // 60 minutes), never before the key's own spacing: the later of both.
+      const mono = this.monotonic();
+      const wait = Math.max(0, (this.idKeyDue ?? mono) - mono, (this.dueMono ?? mono) - mono);
       return [false, both('idKeyNotStored', { time: clock(this.now() + wait + 999) })];
     }
     if (this.isRefused()) {

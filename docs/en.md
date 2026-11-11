@@ -64,7 +64,9 @@ integration config, outside the form (never in `/data`): without that key,
 neither the id nor `/data` gives the MaLo back, even with its last 4 digits,
 which the device name shows. Until Gladys has stored that key, nothing is
 read nor published (status "Gladys could not store the key…", tried again
-after 5 s, doubled up to 5 minutes). The MaLo number itself never appears in an id,
+with the next read of the account: after 5, 10, 20, 40 then every 60
+minutes; saving the form tries again too, at most once in 5 s, doubled up
+to 5 minutes). The MaLo number itself never appears in an id,
 a log, the status or `/data`. The MaLo, not the meter, is the identity: a
 replaced meter keeps its Gladys device and its history.
 

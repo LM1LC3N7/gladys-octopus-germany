@@ -67,7 +67,9 @@ l'intégration, hors du formulaire (jamais dans `/data`) : sans cette clé, ni
 l'identifiant ni `/data` ne redonnent la MaLo, même avec ses 4 derniers
 chiffres, que le nom de l'appareil montre. Tant que Gladys n'a pas
 enregistré cette clé, rien n'est lu ni publié (statut « Gladys n'a pas pu
-enregistrer la clé… », nouvel essai après 5 s, doublé jusqu'à 5 minutes). Le numéro de MaLo lui-même
+enregistrer la clé… », nouvel essai avec la lecture suivante du compte : après 5, 10, 20, 40
+puis toutes les 60 minutes ; enregistrer le formulaire réessaie aussi, au
+plus une fois en 5 s, doublées jusqu'à 5 minutes). Le numéro de MaLo lui-même
 n'apparaît jamais dans un identifiant, un journal, le statut ni `/data`.
 C'est la MaLo, pas le compteur, qui fait l'identité : un compteur remplacé
 garde son appareil Gladys et son historique.
