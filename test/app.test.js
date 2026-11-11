@@ -741,23 +741,87 @@ test('r1 I3: the MaLo key is an HMAC under a key kept in the Gladys config, neve
   assert.equal(again.fake.discoveredDevices[0].external_id.split(':').at(-1), id);
 });
 
-test('r1 I3: the id key not stored in Gladys: nothing read nor published, tried again', async (t) => {
+test('r2 I1: the id key not stored: spaced tries, no storm, a status naming Gladys', async (t) => {
   const env = await setup({ config: { email: K.EMAIL, password: K.PASSWORD } });
   t.after(() => env.app.stop());
   registerHandlers(env.gladys, env.app, env.app.log);
   let fail = true;
+  let calls = 0;
   const real = env.gladys.setConfig.bind(env.gladys);
   env.gladys.setConfig = async (c) => {
+    calls += 1;
     if (fail) throw new Error('down');
     return real(c);
   };
   await env.start({ email: K.EMAIL, password: K.PASSWORD });
   assert.equal(env.kraken.count('account'), 0);
   assert.deepEqual(env.fake.discoveredDevices, []);
+  assert.match(statusText(env), /Gladys could not store the key of the device ids/);
+  await env.wait(10 * MINUTE);
+  assert.ok(calls >= 2 && calls <= 8, `${calls} setConfig in 10 minutes`);
+  assert.ok(env.lines.length <= 2 * calls + 4, `${env.lines.length} log lines`);
+  assert.equal(env.kraken.count('account'), 0, 'nothing read without the key');
+  // Ten saves of the form in a row: the key is not tried at each one.
+  const before = calls;
+  for (let i = 0; i < 10; i += 1)
+    await env.fake.configUpdated({ email: K.EMAIL, password: K.PASSWORD });
+  assert.ok(calls - before <= 1, `${calls - before} setConfig for 10 saves`);
   fail = false;
-  await env.wait(5 * MINUTE + 1000);
+  await env.wait(20 * MINUTE);
   assert.equal(env.kraken.count('account'), 1);
   assert.equal(env.fake.discoveredDevices.length, 1);
+  assert.match(statusText(env), /^Connected/);
+});
+
+test('r2 I2: a form saved during the first setConfig: one key, the stored one, the same ids after a restart', async (t) => {
+  const store = createMemoryStore();
+  const env = await setup({ store, config: { email: K.EMAIL, password: K.PASSWORD } });
+  t.after(() => env.app.stop());
+  registerHandlers(env.gladys, env.app, env.app.log);
+  const real = env.gladys.setConfig.bind(env.gladys);
+  let release;
+  let calls = 0;
+  env.gladys.setConfig = (c) => {
+    calls += 1;
+    return new Promise((resolve) => (release = () => resolve(real(c))));
+  };
+  const first = env.start({ email: K.EMAIL, password: K.PASSWORD });
+  await env.settle();
+  // The form is saved while the key is being stored (no id_key in what it sends).
+  const saved = env.fake.configUpdated({ email: K.EMAIL, password: K.PASSWORD });
+  await env.settle();
+  release();
+  await first;
+  await saved;
+  await env.wait(1000);
+  assert.equal(calls, 1, 'one key made');
+  assert.equal(env.app.idKey, env.fake.config.id_key, 'the key in use is the stored one');
+  const id = env.fake.discoveredDevices[0].external_id;
+  await env.app.stop();
+  const again = await started({ store, config: env.fake.config });
+  t.after(() => again.app.stop());
+  assert.equal(again.fake.discoveredDevices[0].external_id, id);
+});
+
+test('r2 I2: another id key than the one /data was kept with: what depends on the old one goes', async (t) => {
+  const store = createMemoryStore();
+  const env = await started({ store });
+  await env.app.stop();
+  assert.ok(Object.keys(store.data.prices).length === 1 && store.data.keyTag);
+  const other = 'cd'.repeat(32);
+  const again = await started({ store, config: { ...CONFIG, id_key: other } });
+  t.after(() => again.app.stop());
+  const key = keyOf(other, 'malo', K.MALO);
+  assert.deepEqual(again.app.data.prices, {}, 'the prices of the old keys gone');
+  assert.deepEqual(again.app.data.meters, []);
+  assert.deepEqual(again.fake.discoveredDevices, [], 'never a device of the old key offered');
+  await again.wait(HOUR + 1000);
+  assert.deepEqual(Object.keys(store.data.prices), [key]);
+  assert.deepEqual(
+    store.data.meters.map((m) => m.key),
+    [key],
+  );
+  assert.equal(again.fake.discoveredDevices.length, 1, 'never the same MaLo twice');
 });
 
 test('r1 I4: the e-mail login refused by the schema: a status toward the API key, spaced tries', async (t) => {
@@ -944,4 +1008,89 @@ test('r1 I1: a quarter already started keeps its kept price; a dynamic agreement
   k2.answers.account = () => K.account({ agreements: [K.simpleAgreement({ cents: 31 })] });
   await e2.wait(HOUR + 1000);
   assert.equal(fixed.data.prices[KEY][index], 0.295);
+});
+
+test('r2 m1: Discovery published again when an Intelligent device appears after a restart', async (t) => {
+  const store = createMemoryStore();
+  const env = await started({ store });
+  await env.app.stop();
+  const kraken = createKraken({
+    devices: () => K.devices([{ id: 'dev-1', name: 'Wallbox', deviceType: 'CHARGE_POINTS' }]),
+  });
+  const again = await started({ store, kraken, now: K.NOW + 2 * HOUR });
+  t.after(() => again.app.stop());
+  assert.deepEqual(
+    again.fake.discoveredDevices.map((d) => d.external_id.split(':')[2]),
+    ['malo', 'flex'],
+  );
+});
+
+test('r2 m3: a schema error of the login that does not name the e-mail or password is not "login gone"', async (t) => {
+  const kraken = createKraken({
+    token: () =>
+      json({ errors: [{ message: "Cannot query field 'refreshExpiresIn' on type 'X'." }] }, 400),
+  });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  assert.doesNotMatch(statusText(env), /no longer accepts/);
+  assert.match(statusText(env), /could not be read \(graphql\)/);
+});
+
+test('r2 m4: an error pointing at one agreement or one MaLo spoils only that part', async (t) => {
+  const malo = (number, cents) => ({
+    maloNumber: number,
+    meters: [{ id: number, shouldReceiveSmartMeterData: true }],
+    agreements: [K.simpleAgreement({ id: number, cents })],
+  });
+  const body = () => K.account({ malos: [malo('50412345678', 30), malo('50499991234', 40)] });
+  const kraken = createKraken({ account: body });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  const [a, b] = ['50412345678', '50499991234'].map((n) => keyOf(K.ID_KEY, 'malo', n));
+  const priced = (key) =>
+    env.app.priceFor(
+      key,
+      K.NOW + 30 * DAY,
+      env.app.malos.find((m) => m.key === key),
+    );
+  // An agreement in error: no price from it; the other MaLo is read as usual.
+  const errorAt = (path) => ({
+    message: 'Temporary error occurred.',
+    path,
+    extensions: { errorCode: 'KT-CT-3956' },
+  });
+  kraken.answers.account = () => ({
+    ...K.account({ malos: [malo('50412345678', 33), malo('50499991234', 44)] }),
+    errors: [
+      errorAt([
+        'account',
+        'allProperties',
+        0,
+        'electricityMalos',
+        0,
+        'agreements',
+        0,
+        'unitRateForecast',
+      ]),
+    ],
+  });
+  await env.wait(HOUR + 1000);
+  assert.match(statusText(env), /^Connected/);
+  const first = env.app.malos.find((m) => m.agreements[0].broken);
+  assert.ok(first);
+  assert.equal(priced(first.key), undefined);
+  const other = first.key === a ? b : a;
+  assert.ok([0.33, 0.44].includes(priced(other)), 'the other MaLo read');
+  // A MaLo in error: what was read before is kept for it.
+  kraken.answers.account = () => ({
+    ...K.account({ malos: [malo('50412345678', 50), malo('50499991234', 60)] }),
+    errors: [errorAt(['account', 'allProperties', 0, 'electricityMalos', 1, 'meters'])],
+  });
+  await env.wait(HOUR + 1000);
+  const prices = [a, b].map(priced).sort();
+  assert.ok(prices.includes(0.5) || prices.includes(0.6), 'one MaLo read anew');
+  assert.ok(
+    prices.some((p) => p !== 0.5 && p !== 0.6),
+    'the other kept as before',
+  );
 });

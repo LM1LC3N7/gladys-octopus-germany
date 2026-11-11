@@ -71,6 +71,7 @@ import {
 import { both, t } from './i18n.js';
 import { KrakenError, KrakenSession, ktOf } from './kraken/client.js';
 import {
+  brokenParts,
   forecastEnd,
   keyOf,
   halfHours,
@@ -240,6 +241,7 @@ export class OctopusApp {
       backfilled: [],
       prices: {},
       dynamic: [],
+      keyTag: null,
     };
     this.storeState = 'pending';
     this.loading = null;
@@ -276,7 +278,10 @@ export class OctopusApp {
     this.lastStatus = undefined;
     this.lastTest = undefined;
     this.dueMono = undefined;
-    this.discoveredOnce = false;
+    this.lastDiscovery = undefined;
+    this.idKeyPending = undefined;
+    this.idKeyDue = undefined;
+    this.idKeyFailures = 0;
     this.freshConfig = false;
   }
 
@@ -391,33 +396,84 @@ export class OctopusApp {
   /** The id key stored in the Gladys config (outside the form), when valid. */
   takeIdKey(rawConfig) {
     const key = typeof rawConfig?.id_key === 'string' ? rawConfig.id_key : '';
-    if (ID_KEY.test(key) && key !== this.idKey) {
-      if (this.idKey) {
-        // Another key: the keys of what was read change with it.
-        this.malos = [];
-        this.flex = [];
-      }
-      this.idKey = key;
+    if (ID_KEY.test(key)) this.adoptIdKey(key);
+  }
+
+  /** The key stored in Gladys becomes the one in use; what depended on another one is forgotten. */
+  adoptIdKey(key) {
+    if (key === this.idKey) return;
+    if (this.idKey) {
+      // Another key: the keys of what was read change with it.
+      this.malos = [];
+      this.flex = [];
+      this.lastDiscovery = undefined;
     }
+    this.idKey = key;
+    this.checkKeyTag();
+  }
+
+  /**
+   * /data keeps 4 bytes of an HMAC of the id key (nothing to find the key
+   * back from): when the key in use is another one, the MaLos, prices,
+   * dynamic agreements and backfills of /data (keyed by the old one) go.
+   */
+  checkKeyTag() {
+    if (!this.idKey || this.storeState !== 'ok') return;
+    const tag = keyOf(this.idKey, 'tag', 'octopus-germany').slice(0, 8);
+    if (this.data.keyTag && this.data.keyTag !== tag) {
+      this.data.meters = [];
+      this.data.prices = {};
+      this.data.dynamic = [];
+      this.data.backfilled = [];
+      this.lastDiscovery = undefined;
+    }
+    this.data.keyTag = tag;
   }
 
   /**
    * The secret of the device keys (HMAC): read from the Gladys config, made
    * once and stored there (never in /data, never shown in the form). Until it
-   * is stored, nothing is read nor published (the ids depend on it).
+   * is stored, nothing is read nor published (the ids depend on it). One
+   * attempt at a time (shared by every caller), spaced 5 s doubled up to
+   * 5 min after a failure; the key adopted is the one Gladys holds once the
+   * write is done (read back), never the one made here when another won.
    */
-  async ensureIdKey(gen) {
-    if (this.idKey) return true;
-    const key = this.random(32).toString('hex');
+  ensureIdKey(gen) {
+    if (this.idKey) return Promise.resolve(true);
+    if (this.idKeyPending) return this.idKeyPending;
+    if (this.idKeyDue !== undefined && this.monotonic() < this.idKeyDue)
+      return Promise.resolve(false);
+    this.idKeyPending = this.storeIdKey(gen).finally(() => {
+      this.idKeyPending = undefined;
+    });
+    return this.idKeyPending;
+  }
+
+  async storeIdKey(gen) {
+    const stored = (config) => (ID_KEY.test(config?.id_key ?? '') ? config.id_key : undefined);
     try {
-      await this.gladys.setConfig({ id_key: key });
+      let key = stored(await this.gladys.getConfig());
+      if (!key) {
+        await this.gladys.setConfig({ id_key: this.random(32).toString('hex') });
+        // Read back: the key Gladys keeps is the only one used.
+        key = stored(await this.gladys.getConfig());
+        if (!key) throw new Error('not stored');
+      }
+      if (this.stopped && this.gone(gen)) return false;
+      this.idKeyFailures = 0;
+      this.idKeyDue = undefined;
+      this.adoptIdKey(key);
+      await this.save();
+      return true;
     } catch (err) {
-      this.log.warn(`Id key not stored in Gladys (${err?.name ?? 'Error'}): tried again later`);
+      this.idKeyFailures = (this.idKeyFailures ?? 0) + 1;
+      const wait = Math.min(CONFIG_RETRY_MAX, CONFIG_RETRY_MIN * 2 ** (this.idKeyFailures - 1));
+      this.idKeyDue = this.monotonic() + wait;
+      this.log.warn(
+        `Id key not stored in Gladys (${err?.name ?? 'Error'}): again in ${wait / 1000} s`,
+      );
       return false;
     }
-    if (this.gone(gen) && this.stopped) return false;
-    this.idKey = this.idKey ?? key;
-    return true;
   }
 
   async stop() {
@@ -491,6 +547,8 @@ export class OctopusApp {
         const late = this.storeState === 'unreadable';
         this.merge(raw);
         this.storeState = 'ok';
+        // What /data keeps under another id key goes.
+        this.checkKeyTag();
         if (late) await this.afterLateLoad();
       } catch (err) {
         this.storeState = 'unreadable';
@@ -561,6 +619,9 @@ export class OctopusApp {
       ? data.backfilled.filter((k) => KEY.test(k)).slice(0, 16)
       : [];
     this.data.backfilled = [...new Set([...this.data.backfilled, ...backfilled])];
+    if (typeof data.keyTag === 'string' && /^[0-9a-f]{8}$/.test(data.keyTag) && !this.data.keyTag) {
+      this.data.keyTag = data.keyTag;
+    }
     const dynamic = Array.isArray(data.dynamic) ? data.dynamic.filter((k) => KEY.test(k)) : [];
     this.data.dynamic = [...new Set([...dynamic, ...this.data.dynamic])].slice(
       -MAX_KEPT_AGREEMENTS,
@@ -584,6 +645,7 @@ export class OctopusApp {
       backfilled: this.data.backfilled,
       prices: this.data.prices,
       dynamic: this.data.dynamic,
+      keyTag: this.data.keyTag,
     };
     try {
       // A slow volume never holds a read: the write goes on in the background.
@@ -803,16 +865,16 @@ export class OctopusApp {
 
   async readAccount(gen) {
     const session = this.session;
-    if (!(await this.ensureIdKey(gen))) {
-      this.failures += 1;
-      throw new KrakenError('gladys_config');
-    }
-    if (this.gone(gen)) return;
-    // The attempt is kept BEFORE the request: a restart never reads sooner.
+    // The attempt is kept BEFORE anything: a restart, or a key not stored, never reads sooner.
     this.freshConfig = false;
     this.lastAccountMono = this.monotonic();
     this.data.lastAccount = this.now();
     await this.save();
+    if (this.gone(gen)) return;
+    if (!(await this.ensureIdKey(gen))) {
+      this.failures += 1;
+      throw new KrakenError('gladys_config');
+    }
     if (this.gone(gen)) return;
     let numbers;
     try {
@@ -838,9 +900,17 @@ export class OctopusApp {
       const { data, errors } = await session.request(ACCOUNT, { accountNumber: number });
       // An answer with errors (a forecast in KT-CT-3956, a part missing) is
       // passing: what was read before is kept, nothing is guessed from it.
-      if (errors) throw new KrakenError('partial', { kt: ktOf(errors) });
-      malos = parseAccount(data, this.idKey);
+      // An error pointing at one MaLo or one agreement only spoils that part
+      // (a MaLo keeps what was read before, an agreement has no price); an
+      // error anywhere else spoils the whole answer.
+      const parts = errors ? brokenParts(errors) : undefined;
+      if (parts?.whole) throw new KrakenError('partial', { kt: ktOf(errors) });
+      if (parts) this.log.warn(`Part of the account not read (${ktOf(errors) ?? 'error'})`);
+      malos = parseAccount(data, this.idKey, parts);
       if (!malos) throw new KrakenError('bad_response');
+      malos = malos
+        .map((m) => (m.broken ? this.malos.find((x) => x.key === m.key) : m))
+        .filter(Boolean);
       this.markDynamic(malos);
     } catch (err) {
       this.failures += 1;
@@ -889,13 +959,12 @@ export class OctopusApp {
     const meters = [...seen, ...this.data.meters.filter((x) => !seen.some((m) => m.key === x.key))]
       .sort((a, b) => b.seen - a.seen)
       .slice(0, MAX_KEPT_METERS);
-    const strip = (list) => JSON.stringify(list.map(({ seen: _seen, ...m }) => m));
-    const changed = strip(meters) !== strip(this.data.meters);
     this.data.meters = meters;
     this.prunePrices();
     await this.save();
     if (this.gone(gen)) return;
-    if (changed || !this.discoveredOnce) await this.publishDiscovery(gen);
+    // Published again when anything offered changed (a MaLo, an Intelligent device).
+    await this.publishDiscovery(gen, { onlyChanged: true });
     await this.publishPrices(gen);
   }
 
@@ -1084,7 +1153,7 @@ export class OctopusApp {
   }
 
   /** The devices offered in Discovery: what was read, else what /data remembers. Never a request. */
-  async publishDiscovery(gen) {
+  async publishDiscovery(gen, { onlyChanged = false } = {}) {
     const meters = this.malos.length
       ? this.malos.map((m) => ({ ...m, tariff: labelAt(m.agreements, this.now()) }))
       : this.data.meters;
@@ -1092,9 +1161,11 @@ export class OctopusApp {
       ...meters.map((m) => buildMaloDevice(this.gladys, m)),
       ...this.flex.map((d) => buildFlexDevice(this.gladys, d)),
     ];
+    const text = JSON.stringify(devices);
+    if (onlyChanged && text === this.lastDiscovery) return;
     try {
       await this.gladys.publishDiscoveredDevices(devices);
-      if (!this.gone(gen)) this.discoveredOnce = true;
+      if (!this.gone(gen)) this.lastDiscovery = text;
     } catch (err) {
       this.log.warn(`Discovery not published (${err?.name ?? 'Error'})`);
     }
@@ -1271,6 +1342,10 @@ export class OctopusApp {
 
   statusNow() {
     if (this.config.problem) return [false, both(this.config.problem)];
+    if (!this.idKey && this.idKeyFailures > 0) {
+      const wait = Math.max(0, (this.idKeyDue ?? this.monotonic()) - this.monotonic());
+      return [false, both('idKeyNotStored', { time: clock(this.now() + wait + 999) })];
+    }
     if (this.isRefused()) {
       return [
         false,

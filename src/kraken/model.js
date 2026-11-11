@@ -200,18 +200,41 @@ export function parseAgreement(a) {
  * [{ key, suffix, propertyId, malo, smart, agreements }], sorted by key.
  * `malo` (the full number) stays in memory: it filters the measurements.
  */
-export function parseAccount(data, idKey) {
+/**
+ * The parts of an account answer its GraphQL errors point at (`path`):
+ * `{ whole, malos: Set('p/m'), agreements: Set('p/m/a') }`. An error
+ * without a path inside a MaLo makes the whole answer unusable.
+ */
+export function brokenParts(errors) {
+  const out = { whole: false, malos: new Set(), agreements: new Set() };
+  for (const e of list(errors, 50)) {
+    const path = Array.isArray(e?.path) ? e.path : [];
+    const at = (name) => {
+      const i = path.indexOf(name);
+      return i >= 0 && Number.isInteger(path[i + 1]) ? path[i + 1] : undefined;
+    };
+    const [p, m, a] = [at('allProperties'), at('electricityMalos'), at('agreements')];
+    if (p === undefined || m === undefined) out.whole = true;
+    else if (a === undefined) out.malos.add(`${p}/${m}`);
+    else out.agreements.add(`${p}/${m}/${a}`);
+  }
+  return out;
+}
+
+export function parseAccount(data, idKey, broken = { malos: new Set(), agreements: new Set() }) {
   const properties = data?.account?.allProperties;
   if (!Array.isArray(properties)) return undefined;
   const malos = [];
-  for (const p of properties.slice(0, MAX_METERS)) {
+  for (const [pi, p] of properties.slice(0, MAX_METERS).entries()) {
     const propertyId = String(p?.id ?? '');
     if (!PROPERTY.test(propertyId)) continue;
-    for (const m of list(p?.electricityMalos, MAX_METERS)) {
+    for (const [mi, m] of list(p?.electricityMalos, MAX_METERS).entries()) {
       const malo = typeof m?.maloNumber === 'string' ? m.maloNumber.trim() : '';
       if (!MALO.test(malo) || malos.some((x) => x.malo === malo)) continue;
       const meters = list(m?.meters, 4);
       malos.push({
+        // A MaLo an error points at: the app keeps what it read before.
+        broken: broken.malos.has(`${pi}/${mi}`),
         key: keyOf(idKey, 'malo', malo),
         suffix: malo.slice(-4),
         propertyId,
@@ -220,7 +243,12 @@ export function parseAccount(data, idKey) {
           (x) => x?.shouldReceiveSmartMeterData === true || x?.hasSmartMeterGateway === true,
         ),
         agreements: list(m?.agreements, MAX_AGREEMENTS)
-          .map(parseAgreement)
+          .map((a, ai) => {
+            const agreement = parseAgreement(a);
+            // An agreement an error points at: in force, its price is unknown.
+            if (agreement && broken.agreements.has(`${pi}/${mi}/${ai}`)) agreement.broken = true;
+            return agreement;
+          })
           .filter(Boolean)
           .sort((a, b) => a.from - b.from),
       });
@@ -265,7 +293,7 @@ export function agreementAt(agreements, t) {
 /** The price (EUR/kWh) of the quarter starting at `t` from the agreements; undefined when unknown. */
 export function priceAt(agreements, t) {
   const a = agreementAt(agreements, t);
-  if (!a) return undefined;
+  if (!a || a.broken) return undefined;
   if (a.dynamic || a.forecast.length) {
     // Never the fixed rate of a dynamic product: unknown outside its forecast.
     return a.forecast.find((f) => f.from <= t && t < f.to)?.price;

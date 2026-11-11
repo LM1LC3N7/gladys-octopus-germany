@@ -179,7 +179,9 @@ export async function post({
       error.status = status;
       // A document the schema refuses (a field removed): read, never echoed.
       const message = typeof errors[0]?.message === 'string' ? errors[0].message : '';
-      error.schema = !kt && SCHEMA_ERROR.test(message.slice(0, 500));
+      // Only an error naming the e-mail or password fields means that login is gone.
+      const text = message.slice(0, 500);
+      error.schema = !kt && SCHEMA_ERROR.test(text) && /\b(email|password)\b/i.test(text);
       throw error;
     }
     throw new KrakenError('bad_response', { status });

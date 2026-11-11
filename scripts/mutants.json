@@ -270,12 +270,6 @@
     "to": "!hit"
   },
   {
-    "name": "account answer with errors used",
-    "file": "src/app.js",
-    "from": "if (errors) throw new KrakenError('partial', { kt: ktOf(errors) });",
-    "to": ""
-  },
-  {
     "name": "kept past price rewritten",
     "file": "src/app.js",
     "from": "if (q <= now && kept[index] !== undefined) continue;",
@@ -334,5 +328,131 @@
     "file": "src/app.js",
     "from": "    if (!(await this.ensureIdKey(gen))) {\n      this.failures += 1;",
     "to": "    if (false) {\n      this.failures += 1;"
+  },
+  {
+    "name": "r2 prix gardé d'un quart commencé réécrit",
+    "file": "src/app.js",
+    "from": "        if (q <= now && kept[index] !== undefined) continue;\n",
+    "to": ""
+  },
+  {
+    "name": "r2 contrat vu dynamique oublié",
+    "file": "src/app.js",
+    "from": "        else if (known.has(key)) a.dynamic = true;\n",
+    "to": ""
+  },
+  {
+    "name": "r2 produit nommé dynamique non reconnu",
+    "file": "src/kraken/model.js",
+    "from": "/dynami/i.test(",
+    "to": "/^$/.test("
+  },
+  {
+    "name": "r2 MaLo vues remplacées (plus fusionnées)",
+    "file": "src/app.js",
+    "from": "const meters = [...seen, ...this.data.meters.filter((x) => !seen.some((m) => m.key === x.key))]",
+    "to": "const meters = [...seen]"
+  },
+  {
+    "name": "r2 lecture sans clé d'id",
+    "file": "src/app.js",
+    "from": "    if (!(await this.ensureIdKey(gen))) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "r2 prix courant d'un tarif périmé",
+    "file": "src/app.js",
+    "from": "    if (!malo) return { price: null };\n",
+    "to": ""
+  },
+  {
+    "name": "r2 suffixe vide avec plusieurs MaLo",
+    "file": "src/app.js",
+    "from": "if (!raw) return known.length === 1 ? known[0] : undefined;",
+    "to": "if (!raw) return known[0];"
+  },
+  {
+    "name": "r2 connexion e-mail retirée non reconnue",
+    "file": "src/kraken/client.js",
+    "from": "if (primary && !input.APIKey && (err.kt === DISABLED || err.schema)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "r2 pause de connexion non levée par de nouveaux identifiants",
+    "file": "src/app.js",
+    "from": "if (credsChanged && this.pause && LOGIN_PAUSES.has(this.pause.code)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "r2 refus levé par le seul numéro de compte",
+    "file": "src/app.js",
+    "from": "if (credsChanged && this.refused) {",
+    "to": "if (changed && this.credKey !== undefined && this.refused) {"
+  },
+  {
+    "name": "r2 HMAC sans clé",
+    "file": "src/kraken/model.js",
+    "from": "createHmac('sha256', idKey)",
+    "to": "createHmac('sha256', '')"
+  },
+  {
+    "name": "id key attempts not shared",
+    "file": "src/app.js",
+    "from": "if (this.idKeyPending) return this.idKeyPending;",
+    "to": ""
+  },
+  {
+    "name": "id key not read back",
+    "file": "src/app.js",
+    "from": "        key = stored(await this.gladys.getConfig());\n        if (!key) throw new Error('not stored');",
+    "to": "        key = this.idKeyMade;\n        if (!key) throw new Error('not stored');"
+  },
+  {
+    "name": "key tag not checked",
+    "file": "src/app.js",
+    "from": "if (this.data.keyTag && this.data.keyTag !== tag) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "discovery only on MaLo change",
+    "file": "src/app.js",
+    "from": "if (onlyChanged && text === this.lastDiscovery) return;",
+    "to": "if (onlyChanged && this.lastDiscovery !== undefined) return;"
+  },
+  {
+    "name": "schema error not tied to email",
+    "file": "src/kraken/client.js",
+    "from": "&& /\\b(email|password)\\b/i.test(text)",
+    "to": ""
+  },
+  {
+    "name": "broken agreement priced",
+    "file": "src/kraken/model.js",
+    "from": "if (!a || a.broken) return undefined;",
+    "to": "if (!a) return undefined;"
+  },
+  {
+    "name": "broken MaLo taken as read",
+    "file": "src/app.js",
+    "from": ".map((m) => (m.broken ? this.malos.find((x) => x.key === m.key) : m))",
+    "to": ".map((m) => m)"
+  },
+  {
+    "name": "key attempt not noted before",
+    "file": "src/app.js",
+    "from": "    if (!(await this.ensureIdKey(gen))) {\n      this.failures += 1;\n      throw new KrakenError('gladys_config');",
+    "to": "    if (!(await this.ensureIdKey(gen))) {\n      this.lastAccountMono = undefined;\n      throw new KrakenError('gladys_config');"
+  },
+  {
+    "name": "id key tried without backoff",
+    "file": "src/app.js",
+    "from": "    if (this.idKeyDue !== undefined && this.monotonic() < this.idKeyDue)\n      return Promise.resolve(false);\n",
+    "to": ""
+  },
+  {
+    "name": "answer with errors outside a MaLo taken (r2 reviewer, adapted)",
+    "file": "src/app.js",
+    "from": "if (parts?.whole) throw new KrakenError('partial', { kt: ktOf(errors) });",
+    "to": ""
   }
 ]

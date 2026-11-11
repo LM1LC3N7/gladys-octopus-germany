@@ -62,7 +62,9 @@ The **device id** is a keyed hash of the MaLo number (HMAC-SHA-256, 16 hex
 digits) under a random key made at the first start and kept by Gladys in the
 integration config, outside the form (never in `/data`): without that key,
 neither the id nor `/data` gives the MaLo back, even with its last 4 digits,
-which the device name shows. The MaLo number itself never appears in an id,
+which the device name shows. Until Gladys has stored that key, nothing is
+read nor published (status "Gladys could not store the key…", tried again
+after 5 s, doubled up to 5 minutes). The MaLo number itself never appears in an id,
 a log, the status or `/data`. The MaLo, not the meter, is the identity: a
 replaced meter keeps its Gladys device and its history.
 
@@ -107,7 +109,9 @@ consumption by half hour, the integration answers its cost:
 A dynamic tariff is priced from its forecast only, never from the fixed rate
 of the product: an agreement seen dynamic once stays so (kept in `/data`),
 and an answer of Octopus carrying an error (for example KT-CT-3956 on the
-forecast) is a passing error: nothing is taken from it, the prices read
+forecast) only spoils the part it points at (that agreement has no price, that
+MaLo keeps what was read before); an error pointing nowhere spoils the whole
+answer, a passing error: nothing is taken from it, the prices read
 before are kept. The dynamic prices are only known ahead of time (today and
 tomorrow): the integration keeps every price it has seen in `/data` for 40
 days, so that it can price the past, and a price kept for a quarter already

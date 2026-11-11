@@ -65,7 +65,9 @@ L'**identifiant de l'appareil** est une empreinte à clé du numéro de MaLo
 premier démarrage et gardée par Gladys dans la configuration de
 l'intégration, hors du formulaire (jamais dans `/data`) : sans cette clé, ni
 l'identifiant ni `/data` ne redonnent la MaLo, même avec ses 4 derniers
-chiffres, que le nom de l'appareil montre. Le numéro de MaLo lui-même
+chiffres, que le nom de l'appareil montre. Tant que Gladys n'a pas
+enregistré cette clé, rien n'est lu ni publié (statut « Gladys n'a pas pu
+enregistrer la clé… », nouvel essai après 5 s, doublé jusqu'à 5 minutes). Le numéro de MaLo lui-même
 n'apparaît jamais dans un identifiant, un journal, le statut ni `/data`.
 C'est la MaLo, pas le compteur, qui fait l'identité : un compteur remplacé
 garde son appareil Gladys et son historique.
@@ -114,7 +116,9 @@ consommation par demi-heure, l'intégration en répond le coût :
 Un tarif dynamique est tarifé d'après sa prévision seulement, jamais d'après
 le prix fixe du produit : un contrat vu dynamique une fois le reste (noté
 dans `/data`), et une réponse d'Octopus qui porte une erreur (par exemple
-KT-CT-3956 sur la prévision) est une erreur passagère : rien n'en est tiré,
+KT-CT-3956 sur la prévision) ne gâche que la partie qu'elle désigne (ce
+contrat n'a pas de prix, cette MaLo garde ce qui a été lu avant) ; une erreur
+qui ne désigne rien gâche toute la réponse, erreur passagère : rien n'en est tiré,
 les prix lus avant sont gardés. Les prix dynamiques ne sont connus qu'à
 l'avance (aujourd'hui et demain) : l'intégration garde dans `/data` chaque
 prix vu pendant 40 jours, pour tarifer le passé, et le prix gardé d'un quart

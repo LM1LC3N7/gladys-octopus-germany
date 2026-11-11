@@ -44,6 +44,10 @@ const TEXTS = {
     en: 'Octopus says API access is not enabled for this account user (KT-CT-11334). Ask Octopus to enable it, then press Test.',
     fr: 'Octopus indique que l’accès à l’API n’est pas activé pour cet utilisateur (KT-CT-11334). Demandez à Octopus de l’activer, puis appuyez sur Tester.',
   },
+  idKeyNotStored: {
+    en: 'Gladys could not store the key of the device ids of this integration: nothing is read until it is stored. Next try at {time}.',
+    fr: 'Gladys n’a pas pu enregistrer la clé des identifiants d’appareils de cette intégration : rien n’est lu tant qu’elle ne l’est pas. Nouvel essai à {time}.',
+  },
   loginGone: {
     en: 'Octopus no longer accepts the login by e-mail address and password: enter an API key of your account (see the guide). Next try at {time}.',
     fr: 'Octopus n’accepte plus la connexion par adresse e-mail et mot de passe : saisissez une clé d’API de votre compte (voir le guide). Nouvel essai à {time}.',
