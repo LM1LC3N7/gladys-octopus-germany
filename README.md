@@ -3,8 +3,8 @@
 Unofficial [Gladys Assistant](https://gladysassistant.com) integration for
 **Octopus Energy Germany** customers, not affiliated with Octopus Energy. It
 reads your account through the official Kraken GraphQL API of Octopus
-Germany (`api.oeg-kraken.energy`) with your e-mail address and password (or
-an API key of the account):
+Germany (`api.oeg-kraken.energy`) with an API key of your account
+(recommended) or, as a fallback, your e-mail address and password:
 
 - one device per electricity market location (MaLo): price per kWh now and
   next, monthly standing charge, smart-meter (iMSys) consumption by half hour

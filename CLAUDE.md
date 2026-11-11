@@ -63,8 +63,9 @@ scripts/                          cover.png generator, mutation runner and list
 ## Rules
 
 - **Octopus keys are forever too**: the external ids `malo:<hash>` and
-  `flex:<hash>` (16 hex of a SHA-256 of the MaLo / Kraken device id, see
-  `keyOf`), the `FEATURE` keys of `src/devices.js`, the template key
+  `flex:<hash>` (16 hex of an HMAC-SHA-256 of the MaLo / Kraken device id
+  under the `id_key` kept in the Gladys config outside the form, see
+  `keyOf`; never an unkeyed hash, never the key in /data or a log), the `FEATURE` keys of `src/devices.js`, the template key
   `octopus-de-electricity` and its inputs `malo_suffix`, `standing_charge`.
 - **Never the MaLo number, the e-mail, the password, a token or the account
   number** in a log, the status, an error message, an id or `/data`.

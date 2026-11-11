@@ -69,9 +69,10 @@ import {
   priceStates,
 } from './devices.js';
 import { both, t } from './i18n.js';
-import { KrakenError, KrakenSession } from './kraken/client.js';
+import { KrakenError, KrakenSession, ktOf } from './kraken/client.js';
 import {
   forecastEnd,
+  keyOf,
   halfHours,
   labelAt,
   parseAccount,
@@ -98,7 +99,14 @@ const TIMED_OUT = Symbol('timed out');
 const finite = (v) => typeof v === 'number' && Number.isFinite(v);
 const KEY = /^[0-9a-f]{16}$/;
 /** Errors that pause every request. */
-const PAUSING = new Set(['rate_limited', 'server', 'login_blocked']);
+const PAUSING = new Set(['rate_limited', 'server', 'login_blocked', 'login_gone']);
+/** Pauses that belong to the login: lifted when the credentials change. */
+const LOGIN_PAUSES = new Set(['login_blocked', 'login_gone']);
+const ID_KEY = /^[0-9a-f]{64}$/;
+/** At most this many MaLos (and their prices) kept in /data, the least recently seen out. */
+const MAX_KEPT_METERS = 8;
+/** At most this many agreements remembered as dynamic. */
+const MAX_KEPT_AGREEMENTS = 50;
 
 /** 8 bits of a salted hash of the credentials: nothing to find them back from. */
 export const tagOf = (salt, credentials) =>
@@ -161,6 +169,7 @@ function validMeters(meters) {
       suffix: m.suffix,
       smart: m.smart === true,
       tariff: typeof m.tariff === 'string' ? m.tariff.slice(0, 64) : '',
+      seen: finite(m.seen) ? m.seen : 0,
     });
   }
   return out;
@@ -230,6 +239,7 @@ export class OctopusApp {
       meters: [],
       backfilled: [],
       prices: {},
+      dynamic: [],
     };
     this.storeState = 'pending';
     this.loading = null;
@@ -318,14 +328,24 @@ export class OctopusApp {
     const credentials = credentialsOf(config);
     const credKey = JSON.stringify([credentials, config.accountNumber]);
     const changed = credKey !== this.credKey;
+    const credsChanged =
+      this.credKey !== undefined && JSON.stringify(credentials) !== this.credOnly;
+    this.credOnly = JSON.stringify(credentials);
     // Another login or account entered by the user: read soon (not at a restart).
     if (changed && this.credKey !== undefined) this.freshConfig = true;
     // Credentials changed in this process: always tried, even when their
-    // 8-bit tag matches the refused one (a restart keeps the tag only).
-    if (changed && this.credKey !== undefined && this.refused) {
+    // 8-bit tag matches the refused one (a restart keeps the tag only). The
+    // account number alone never lifts a refusal.
+    if (credsChanged && this.refused) {
       this.refused = undefined;
       this.data.refused = null;
     }
+    // A pause of the login (blocked, e-mail login gone) ends with new credentials.
+    if (credsChanged && this.pause && LOGIN_PAUSES.has(this.pause.code)) {
+      this.pause = undefined;
+      this.data.pause = null;
+    }
+    this.takeIdKey(rawConfig);
     this.config = config;
     if (changed || !this.session) {
       this.session?.close();
@@ -356,6 +376,8 @@ export class OctopusApp {
     this.clearRound();
     await this.ready();
     if (this.gone(gen)) return;
+    await this.ensureIdKey(gen);
+    if (this.gone(gen)) return;
     await this.refreshCreated(gen);
     if (this.gone(gen)) return;
     await this.publishDiscovery(gen);
@@ -364,6 +386,38 @@ export class OctopusApp {
     this.armTick(gen);
     await this.publishPrices(gen);
     await this.report(gen);
+  }
+
+  /** The id key stored in the Gladys config (outside the form), when valid. */
+  takeIdKey(rawConfig) {
+    const key = typeof rawConfig?.id_key === 'string' ? rawConfig.id_key : '';
+    if (ID_KEY.test(key) && key !== this.idKey) {
+      if (this.idKey) {
+        // Another key: the keys of what was read change with it.
+        this.malos = [];
+        this.flex = [];
+      }
+      this.idKey = key;
+    }
+  }
+
+  /**
+   * The secret of the device keys (HMAC): read from the Gladys config, made
+   * once and stored there (never in /data, never shown in the form). Until it
+   * is stored, nothing is read nor published (the ids depend on it).
+   */
+  async ensureIdKey(gen) {
+    if (this.idKey) return true;
+    const key = this.random(32).toString('hex');
+    try {
+      await this.gladys.setConfig({ id_key: key });
+    } catch (err) {
+      this.log.warn(`Id key not stored in Gladys (${err?.name ?? 'Error'}): tried again later`);
+      return false;
+    }
+    if (this.gone(gen) && this.stopped) return false;
+    this.idKey = this.idKey ?? key;
+    return true;
   }
 
   async stop() {
@@ -507,6 +561,10 @@ export class OctopusApp {
       ? data.backfilled.filter((k) => KEY.test(k)).slice(0, 16)
       : [];
     this.data.backfilled = [...new Set([...this.data.backfilled, ...backfilled])];
+    const dynamic = Array.isArray(data.dynamic) ? data.dynamic.filter((k) => KEY.test(k)) : [];
+    this.data.dynamic = [...new Set([...dynamic, ...this.data.dynamic])].slice(
+      -MAX_KEPT_AGREEMENTS,
+    );
     const kept = validPrices(data.prices, now);
     for (const [key, slots] of Object.entries(kept)) {
       this.data.prices[key] = { ...slots, ...(this.data.prices[key] ?? {}) };
@@ -525,6 +583,7 @@ export class OctopusApp {
       meters: this.data.meters,
       backfilled: this.data.backfilled,
       prices: this.data.prices,
+      dynamic: this.data.dynamic,
     };
     try {
       // A slow volume never holds a read: the write goes on in the background.
@@ -722,7 +781,7 @@ export class OctopusApp {
     const base =
       err.code === 'rate_limited'
         ? RATE_LIMIT_PAUSE
-        : err.code === 'login_blocked'
+        : LOGIN_PAUSES.has(err.code)
           ? LOGIN_BLOCK_PAUSE
           : SERVER_PAUSE;
     const asked = finite(err.retryAfter) && err.retryAfter > 0 ? err.retryAfter : 0;
@@ -744,6 +803,11 @@ export class OctopusApp {
 
   async readAccount(gen) {
     const session = this.session;
+    if (!(await this.ensureIdKey(gen))) {
+      this.failures += 1;
+      throw new KrakenError('gladys_config');
+    }
+    if (this.gone(gen)) return;
     // The attempt is kept BEFORE the request: a restart never reads sooner.
     this.freshConfig = false;
     this.lastAccountMono = this.monotonic();
@@ -771,9 +835,13 @@ export class OctopusApp {
     }
     let malos;
     try {
-      const { data } = await session.request(ACCOUNT, { accountNumber: number });
-      malos = parseAccount(data);
+      const { data, errors } = await session.request(ACCOUNT, { accountNumber: number });
+      // An answer with errors (a forecast in KT-CT-3956, a part missing) is
+      // passing: what was read before is kept, nothing is guessed from it.
+      if (errors) throw new KrakenError('partial', { kt: ktOf(errors) });
+      malos = parseAccount(data, this.idKey);
       if (!malos) throw new KrakenError('bad_response');
+      this.markDynamic(malos);
     } catch (err) {
       this.failures += 1;
       throw err;
@@ -798,7 +866,7 @@ export class OctopusApp {
     if (this.gone(gen)) return;
     try {
       const { data } = await session.request(DEVICES, { accountNumber: number });
-      const devices = parseDevices(data);
+      const devices = parseDevices(data, this.idKey);
       if (devices) this.flex = devices;
     } catch (err) {
       if (PAUSING.has(err?.code) || err?.code === 'stopped') throw err;
@@ -808,39 +876,72 @@ export class OctopusApp {
       }
     }
     if (this.gone(gen)) return;
-    const meters = this.malos.map((m) => ({
+    // The MaLos seen are merged, never replaced: a read without one keeps it
+    // (and its prices); at most MAX_KEPT_METERS, the least recently seen out.
+    const now = this.now();
+    const seen = this.malos.map((m) => ({
       key: m.key,
       suffix: m.suffix,
       smart: m.smart,
-      tariff: labelAt(m.agreements, this.now())?.slice(0, 64) ?? '',
+      tariff: labelAt(m.agreements, now)?.slice(0, 64) ?? '',
+      seen: now,
     }));
-    const changed = JSON.stringify(meters) !== JSON.stringify(this.data.meters);
+    const meters = [...seen, ...this.data.meters.filter((x) => !seen.some((m) => m.key === x.key))]
+      .sort((a, b) => b.seen - a.seen)
+      .slice(0, MAX_KEPT_METERS);
+    const strip = (list) => JSON.stringify(list.map(({ seen: _seen, ...m }) => m));
+    const changed = strip(meters) !== strip(this.data.meters);
     this.data.meters = meters;
+    this.prunePrices();
     await this.save();
     if (this.gone(gen)) return;
     if (changed || !this.discoveredOnce) await this.publishDiscovery(gen);
     await this.publishPrices(gen);
   }
 
-  /** The prices of the quarters from yesterday to the end of what is known, kept in /data. */
+  /** The agreements seen dynamic once stay dynamic (a forecast missing never gives a fixed rate). */
+  markDynamic(malos) {
+    const known = new Set(this.data.dynamic);
+    for (const m of malos) {
+      for (const a of m.agreements) {
+        const key = keyOf(this.idKey, 'agreement', a.id);
+        if (a.dynamic) known.add(key);
+        else if (known.has(key)) a.dynamic = true;
+      }
+    }
+    this.data.dynamic = [...known].slice(-MAX_KEPT_AGREEMENTS);
+  }
+
+  /**
+   * The prices of the quarters from yesterday to the end of what is known,
+   * kept in /data. A quarter already started keeps the price kept for it.
+   */
   recordPrices() {
     const now = this.now();
-    const oldest = Math.floor((now - PRICE_HISTORY_DAYS * DAY) / QUARTER);
     for (const m of this.malos) {
       const kept = this.data.prices[m.key] ?? {};
       const from = addDays(now, -1);
       const end = Math.min(now + 3 * DAY, Math.max(now + DAY, forecastEnd(m.agreements, now) ?? 0));
       for (let q = from; q < end; q += QUARTER) {
+        const index = Math.floor(q / QUARTER);
+        if (q <= now && kept[index] !== undefined) continue;
         const price = priceAt(m.agreements, q);
-        if (price !== undefined) kept[Math.floor(q / QUARTER)] = price;
+        if (price !== undefined) kept[index] = price;
       }
-      for (const index of Object.keys(kept)) if (Number(index) < oldest) delete kept[index];
       this.data.prices[m.key] = kept;
     }
-    for (const key of Object.keys(this.data.prices)) {
+    this.prunePrices();
+  }
+
+  /** Prices leave /data by their age (40 days) only, or with their MaLo (beyond the 8 kept). */
+  prunePrices() {
+    const oldest = Math.floor((this.now() - PRICE_HISTORY_DAYS * DAY) / QUARTER);
+    for (const [key, kept] of Object.entries(this.data.prices)) {
       if (!this.malos.some((m) => m.key === key) && !this.data.meters.some((m) => m.key === key)) {
         delete this.data.prices[key];
+        continue;
       }
+      for (const index of Object.keys(kept)) if (Number(index) < oldest) delete kept[index];
     }
   }
 
@@ -1015,7 +1116,8 @@ export class OctopusApp {
   }
 
   /** The price of the quarter starting at `q`: the agreements, else the prices kept. */
-  priceFor(key, q, malo = this.malos.find((m) => m.key === key)) {
+  /** `malo`: the MaLo read, or null (never a default: a stale one must not be used). */
+  priceFor(key, q, malo) {
     const live = malo ? priceAt(malo.agreements, q) : undefined;
     return live ?? this.data.prices[key]?.[Math.floor(q / QUARTER)];
   }
@@ -1074,9 +1176,15 @@ export class OctopusApp {
 
   /** The MaLo of a contract: the one ending with the suffix entered, else the only/first one. */
   contractMalo(inputs) {
-    const known = this.malos.length ? this.malos : this.data.meters;
+    // Every MaLo seen (this read and the ones /data keeps): one missing from a
+    // read never makes another one "the first".
+    const known = [
+      ...this.malos,
+      ...this.data.meters.filter((x) => !this.malos.some((m) => m.key === x.key)),
+    ];
     const raw = typeof inputs?.malo_suffix === 'string' ? inputs.malo_suffix.trim() : '';
-    if (!raw) return known[0];
+    // Empty: the only MaLo; with several, never a guess.
+    if (!raw) return known.length === 1 ? known[0] : undefined;
     if (!/^[A-Za-z0-9]{1,4}$/.test(raw)) return undefined;
     const matches = known.filter((m) => m.suffix.toUpperCase().endsWith(raw.toUpperCase()));
     // Two MaLos ending alike: never a guess, the contract is not priced.
@@ -1114,6 +1222,8 @@ export class OctopusApp {
     const m = this.contractMalo(contract?.inputs);
     if (!m) return { price: null };
     const malo = this.freshMalo(m.key);
+    // A tariff read more than 6 hours ago gives no current price (as the features).
+    if (!malo) return { price: null };
     const now = this.now();
     const q = now - (now % QUARTER);
     const price = this.priceFor(m.key, q, malo);
@@ -1175,7 +1285,9 @@ export class OctopusApp {
           ? 'rateLimited'
           : this.pause.code === 'login_blocked'
             ? 'loginBlocked'
-            : 'server';
+            : this.pause.code === 'login_gone'
+              ? 'loginGone'
+              : 'server';
       return [
         false,
         both(key, { time: clock(this.pause.until), code: this.pause.detail ?? this.pause.code }),

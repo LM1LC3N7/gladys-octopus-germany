@@ -99,7 +99,7 @@ test('no key starts with gladys_; secrets have no default; nothing said encrypte
   const secrets = manifest.config_schema.filter((f) => f.type === 'secret');
   assert.deepEqual(
     secrets.map((f) => f.key),
-    ['password', 'api_key'],
+    ['api_key', 'password'],
   );
   for (const f of secrets) {
     assert.equal(f.default, undefined);
@@ -127,7 +127,7 @@ test('no key starts with gladys_; secrets have no default; nothing said encrypte
 test('the config fields are the ones the code reads', () => {
   assert.deepEqual(
     manifest.config_schema.filter((f) => f.type !== 'section').map((f) => f.key),
-    ['email', 'password', 'api_key', 'account_number'],
+    ['api_key', 'email', 'password', 'account_number'],
   );
   assert.equal(field('email').type, 'string');
   const config = read('src/config.js');

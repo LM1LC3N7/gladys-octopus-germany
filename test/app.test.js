@@ -10,11 +10,12 @@ import { registerHandlers } from '../src/handlers.js';
 import { createMemoryStore } from '../src/store.js';
 import { buildFlexDevice, buildMaloDevice } from '../src/devices.js';
 import { fromBerlin } from '../src/time.js';
+import { keyOf, parseAccount, parseAgreement, priceAt } from '../src/kraken/model.js';
 import { CONFIG, DAY, HOUR, MINUTE, createKraken, json, setup, written } from './helpers/app.js';
 import * as K from './fixtures/kraken.js';
 
 const statusText = (env) => env.fake.connectionStatus?.message?.en ?? '';
-const KEY = 'b789481d38e76ab8';
+const KEY = keyOf(K.ID_KEY, 'malo', K.MALO);
 const F = (key, kind = 'malo', id = KEY) => `ext:octopus-germany:${kind}:${id}:${key}`;
 
 /** The MaLo device as the user creates it from Discovery. */
@@ -555,7 +556,7 @@ test('several accounts: the first one, or the one entered; an unknown number is 
 
 test('config problems: nothing sent', async (t) => {
   for (const [config, text] of [
-    [{}, /Enter the e-mail address and the password/],
+    [{}, /Enter an API key/],
     [{ email: K.EMAIL }, /nothing is sent with only one/],
     [{ password: K.PASSWORD }, /nothing is sent with only one/],
     [{ email: 'nobody', password: 'x' }, /does not look like one/],
@@ -641,5 +642,306 @@ test('two MaLos: the suffix chooses; an ambiguous one is never guessed', async (
   assert.equal((await price('1234')).data.costs[0].cost, 0.5);
   assert.equal((await price('5678')).success, false, 'two MaLos end with 5678');
   assert.equal((await price('x y')).success, false);
-  assert.equal((await price('')).success, true, 'empty: the first one');
+  assert.equal((await price('')).success, false, 'empty with several MaLos: never a guess');
+});
+
+// --- Review r1 -----------------------------------------------------------------
+
+test('r1 I1: an account answer with errors (KT-CT-3956) is passing; kept prices never rewritten', async (t) => {
+  const store = createMemoryStore();
+  const start = Date.UTC(2026, 10, 3, 23);
+  const kraken = createKraken({
+    account: () =>
+      K.account({ agreements: [K.dynamicAgreement({ start, hours: 48, cents: () => 26 })] }),
+  });
+  const env = await started({ store, kraken });
+  t.after(() => env.app.stop());
+  const index = String(Math.floor(Date.UTC(2026, 10, 4, 1) / (15 * MINUTE)));
+  assert.equal(store.data.prices[KEY][index], 0.26);
+  // The forecast in error beside the data: nothing taken from this answer.
+  const broken = K.account({
+    agreements: [{ ...K.dynamicAgreement({ start }), unitRateForecast: null }],
+  });
+  kraken.answers.account = () => ({
+    ...broken,
+    errors: [{ message: 'Temporary error occurred.', extensions: { errorCode: 'KT-CT-3956' } }],
+  });
+  await env.wait(HOUR + 1000);
+  assert.match(statusText(env), /last read failed \(KT-CT-3956\)/);
+  assert.equal(store.data.prices[KEY][index], 0.26, 'kept price unchanged');
+  const ack = await env.fake.energyPrice({
+    contract: { id: 'c', inputs: {} },
+    intervals: [{ starts_at: '2026-11-04T01:00:00.000Z', kwh: 1, max_power_kw: 1 }],
+  });
+  assert.equal(ack.data.costs[0].cost, 0.26);
+  // A forecast missing (null, no error) on an agreement seen dynamic: unknown, never the fixed 0.30.
+  kraken.answers.account = () => broken;
+  await env.wait(15 * MINUTE + 1000);
+  await env.wait(HOUR);
+  assert.equal(store.data.prices[KEY][index], 0.26);
+  const later = Date.UTC(2026, 10, 6, 10);
+  assert.equal(env.app.priceFor(KEY, later, env.app.malos[0]), undefined);
+});
+
+test('r1 I1: a dynamic product without readable forecast is never priced at its fixed rate', () => {
+  const start = Date.UTC(2026, 10, 4, 9);
+  const shifted = K.dynamicAgreement({ start: start + 60_000, hours: 3 });
+  const named = { ...K.dynamicAgreement({ start }), unitRateForecast: null };
+  for (const agreement of [shifted, named]) {
+    const [m] = parseAccount(K.account({ agreements: [agreement] }).data, K.ID_KEY);
+    assert.equal(priceAt(m.agreements, start + HOUR), undefined);
+  }
+});
+
+test('r1 I2: reads without the MaLo never erase its 40 days of prices', async (t) => {
+  const store = createMemoryStore();
+  const env = await started({ store });
+  t.after(() => env.app.stop());
+  const kept = Object.keys(store.data.prices[KEY]).length;
+  assert.ok(kept > 90);
+  env.kraken.answers.account = () => K.ok({ account: { allProperties: [] } });
+  await env.wait(2 * HOUR + 1000);
+  assert.equal(env.kraken.count('account'), 3);
+  assert.ok(Object.keys(store.data.prices[KEY]).length >= kept, 'nothing erased');
+  assert.equal(store.data.meters.length, 1, 'the MaLo seen stays known');
+  const ack = await env.fake.energyPrice({
+    contract: { id: 'c', inputs: {} },
+    intervals: [{ starts_at: '2026-11-03T12:00:00.000Z', kwh: 1, max_power_kw: 1 }],
+  });
+  assert.equal(ack.success, true, ack.error);
+  assert.equal(ack.data.costs[0].cost, 0.295);
+});
+
+test('r1 I3: the MaLo key is an HMAC under a key kept in the Gladys config, never in /data', async (t) => {
+  const { createHash } = await import('node:crypto');
+  const store = createMemoryStore();
+  const env = await started({ store, config: { email: K.EMAIL, password: K.PASSWORD } });
+  t.after(() => env.app.stop());
+  const idKey = env.fake.config.id_key;
+  assert.match(idKey, /^[0-9a-f]{64}$/, 'made and stored in the Gladys config');
+  const id = env.fake.discoveredDevices[0].external_id.split(':').at(-1);
+  assert.equal(id, keyOf(idKey, 'malo', K.MALO));
+  assert.ok(!written(env).includes(idKey), 'the id key is not in /data, logs, statuses');
+  // A brute force over every MaLo ending in the 4 digits shown finds nothing without the key.
+  const suffix = store.data.meters[0].suffix;
+  let found = 0;
+  for (let n = 0; n < 200_000; n += 1) {
+    const candidate = `504${String(n).padStart(4, '0')}${suffix}`;
+    const plain = createHash('sha256')
+      .update(`octopus-germany:malo:${candidate}`)
+      .digest('hex')
+      .slice(0, 16);
+    if (plain === id || keyOf('00'.repeat(32), 'malo', candidate) === id) found += 1;
+  }
+  assert.equal(found, 0);
+  // A restart with the stored key: the same ids.
+  await env.app.stop();
+  const again = await started({ store, config: env.fake.config });
+  t.after(() => again.app.stop());
+  assert.equal(again.fake.discoveredDevices[0].external_id.split(':').at(-1), id);
+});
+
+test('r1 I3: the id key not stored in Gladys: nothing read nor published, tried again', async (t) => {
+  const env = await setup({ config: { email: K.EMAIL, password: K.PASSWORD } });
+  t.after(() => env.app.stop());
+  registerHandlers(env.gladys, env.app, env.app.log);
+  let fail = true;
+  const real = env.gladys.setConfig.bind(env.gladys);
+  env.gladys.setConfig = async (c) => {
+    if (fail) throw new Error('down');
+    return real(c);
+  };
+  await env.start({ email: K.EMAIL, password: K.PASSWORD });
+  assert.equal(env.kraken.count('account'), 0);
+  assert.deepEqual(env.fake.discoveredDevices, []);
+  fail = false;
+  await env.wait(5 * MINUTE + 1000);
+  assert.equal(env.kraken.count('account'), 1);
+  assert.equal(env.fake.discoveredDevices.length, 1);
+});
+
+test('r1 I4: the e-mail login refused by the schema: a status toward the API key, spaced tries', async (t) => {
+  const store = createMemoryStore();
+  const gone = () =>
+    json(
+      { errors: [{ message: "Field 'email' is not defined by type 'ObtainJSONWebTokenInput'." }] },
+      400,
+    );
+  const kraken = createKraken({
+    token: (call) => (call.variables.input.APIKey ? K.token() : gone()),
+  });
+  const env = await started({ store, kraken });
+  t.after(() => env.app.stop());
+  assert.match(
+    statusText(env),
+    /no longer accepts the login by e-mail address and password: enter an API key/,
+  );
+  assert.equal(store.data.refused, null, 'never a refusal');
+  assert.equal(store.data.pause.code, 'login_gone');
+  await env.wait(59 * MINUTE);
+  assert.equal(kraken.count('token'), 1);
+  await env.wait(2 * MINUTE);
+  assert.equal(kraken.count('token'), 2, 'after 1 hour');
+  await env.wait(117 * MINUTE);
+  assert.equal(kraken.count('token'), 2);
+  await env.wait(2 * MINUTE);
+  assert.equal(kraken.count('token'), 3, 'then 2 hours');
+  // An API key entered: tried at once, the login pause lifted.
+  await env.fake.configUpdated({ ...CONFIG, api_key: 'sk_live_ABCDEFGHIJ' });
+  await env.wait(MINUTE + 1000);
+  assert.equal(kraken.count('account'), 1);
+  assert.match(statusText(env), /^Connected/);
+  // KT-CT-1113 (field disabled) is the same case.
+  const disabled = createKraken({ token: () => K.ktError('KT-CT-1113') });
+  const other = await started({ kraken: disabled });
+  t.after(() => other.app.stop());
+  assert.match(statusText(other), /no longer accepts the login/);
+});
+
+test('r1 I5: a Retry-After of years pauses 6 hours at most, also read back from /data', async (t) => {
+  const { validPause } = await import('../src/app.js');
+  const store = createMemoryStore();
+  const kraken = createKraken({
+    accounts: () => new Response('', { status: 429, headers: { 'retry-after': '1000000000' } }),
+  });
+  const env = await started({ store, kraken });
+  t.after(() => env.app.stop());
+  assert.ok(store.data.pause.until - K.NOW <= 6 * HOUR);
+  const p = validPause({ until: K.NOW + 30 * DAY, count: 1, code: 'server' }, K.NOW, 1000);
+  assert.equal(p.due, 1000 + 6 * HOUR);
+  assert.equal(p.until, K.NOW + 6 * HOUR);
+});
+
+test('r1 I5: a 429 of the standing charges pauses; the devices query does not leave', async (t) => {
+  const kraken = createKraken({ standing: () => new Response('', { status: 429 }) });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  assert.equal(env.store.data.pause.code, 'rate_limited');
+  assert.equal(kraken.count('devices'), 0);
+});
+
+test('r1 I5: a 429 of the consumption pauses; the next meter is not read; the 7 days not marked done', async (t) => {
+  const malo = (number) => ({
+    maloNumber: number,
+    meters: [{ id: number, shouldReceiveSmartMeterData: true }],
+    agreements: [K.simpleAgreement({ id: number })],
+  });
+  const kraken = createKraken({
+    account: () => K.account({ malos: [malo('50412345678'), malo('50499991234')] }),
+    measurements: () => new Response('', { status: 429 }),
+  });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  for (const d of env.fake.discoveredDevices) await env.fake.deviceCreated(structuredClone(d));
+  await env.wait(MINUTE + 1000);
+  assert.equal(kraken.count('measurements'), 1, 'the second meter waits');
+  assert.equal(env.store.data.pause.code, 'rate_limited');
+  assert.equal(env.store.data.lastFull, null);
+});
+
+test('r1 I5: the daily 7 days not marked done when a meter fails', async (t) => {
+  const kraken = createKraken({ measurements: () => K.ktError('KT-CT-4301') });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  await env.fake.deviceCreated(maloDevice(env));
+  await env.wait(MINUTE + 1000);
+  assert.ok(kraken.count('measurements') >= 1);
+  assert.equal(env.store.data.lastFull, null);
+});
+
+test('r1 I5: the refused tag depends on the password', async () => {
+  const { tagOf } = await import('../src/app.js');
+  const salt = '0123456789abcdef0123456789abcdef';
+  const tags = new Set();
+  for (let i = 0; i < 32; i += 1) tags.add(tagOf(salt, { email: K.EMAIL, password: `p-${i}` }));
+  assert.ok(tags.size > 8);
+});
+
+test('r1 I5: getConfig failing after stop() arms nothing; nothing is sent', async () => {
+  const env = await setup();
+  let reject;
+  const real = env.gladys.getConfig.bind(env.gladys);
+  let first = true;
+  env.gladys.getConfig = () => {
+    if (!first) return real();
+    first = false;
+    return new Promise((_, r) => (reject = r));
+  };
+  const pending = env.app.connected();
+  await env.settle();
+  await env.app.stop();
+  reject(new Error('down'));
+  await pending;
+  await env.wait(DAY);
+  assert.equal(env.kraken.calls.length, 0);
+  assert.equal(env.pending.size, 0, 'no timer left');
+});
+
+test('r1 I5: an unreadable end of agreement is not an open one; overlapping, the later wins', () => {
+  assert.equal(parseAgreement({ ...K.simpleAgreement(), validTo: 'soon' }), undefined);
+  const [m] = parseAccount(
+    K.account({
+      agreements: [
+        K.simpleAgreement({ id: 'old', cents: 30 }),
+        K.goAgreement({ id: 'new', from: '2026-11-01T00:00:00+01:00' }),
+      ],
+    }).data,
+    K.ID_KEY,
+  );
+  assert.equal(priceAt(m.agreements, fromBerlin(2026, 11, 4, 3)), 0.19);
+  assert.equal(priceAt(m.agreements, fromBerlin(2026, 10, 20, 3)), 0.3);
+});
+
+test('r1 m3: the current price of a contract is null when the tariff is stale', async (t) => {
+  const kraken = createKraken({ account: () => K.account({ agreements: [K.goAgreement()] }) });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  kraken.answers.accounts = () => 'network';
+  await env.wait(7 * HOUR);
+  const ack = await env.fake.energyCurrent({ contract: { id: 'c', inputs: {} } });
+  assert.equal(ack.data.price, null);
+});
+
+test('r1 m4: another account number alone never lifts a refusal', async (t) => {
+  const kraken = createKraken({ token: () => K.ktError('KT-CT-1138') });
+  const env = await started({ kraken });
+  t.after(() => env.app.stop());
+  await env.fake.configUpdated({ ...CONFIG, account_number: 'A-ZZZZ9999' });
+  await env.wait(2 * HOUR);
+  assert.equal(kraken.count('token'), 1);
+  assert.match(statusText(env), /refused the login/);
+});
+
+test('r1 I1: a quarter already started keeps its kept price; a dynamic agreement stays dynamic', async (t) => {
+  const store = createMemoryStore();
+  const start = Date.UTC(2026, 10, 3, 23);
+  // A dynamic agreement whose product name says nothing.
+  const plain = (forecast) => ({
+    ...K.dynamicAgreement({ start, hours: 48, cents: () => 26 }),
+    product: { code: 'OE-VAR', fullName: 'Octopus Strom', isTimeOfUse: true },
+    ...(forecast ? {} : { unitRateForecast: null }),
+  });
+  const kraken = createKraken({ account: () => K.account({ agreements: [plain(true)] }) });
+  const env = await started({ store, kraken });
+  t.after(() => env.app.stop());
+  kraken.answers.account = () => K.account({ agreements: [plain(false)] });
+  await env.wait(HOUR + 1000);
+  assert.match(statusText(env), /^Connected/);
+  assert.equal(
+    env.app.priceFor(KEY, Date.UTC(2026, 10, 6, 12), env.app.malos[0]),
+    undefined,
+    'never the fixed 0.30',
+  );
+  // A fixed rate changed afterwards: the past quarter keeps its kept price.
+  const fixed = createMemoryStore();
+  const k2 = createKraken({
+    account: () => K.account({ agreements: [K.simpleAgreement({ cents: 29.5 })] }),
+  });
+  const e2 = await started({ store: fixed, kraken: k2 });
+  t.after(() => e2.app.stop());
+  const index = String(Math.floor(Date.UTC(2026, 10, 3, 12) / (15 * MINUTE)));
+  assert.equal(fixed.data.prices[KEY][index], 0.295);
+  k2.answers.account = () => K.account({ agreements: [K.simpleAgreement({ cents: 31 })] });
+  await e2.wait(HOUR + 1000);
+  assert.equal(fixed.data.prices[KEY][index], 0.295);
 });

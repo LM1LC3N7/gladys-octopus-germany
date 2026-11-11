@@ -45,6 +45,11 @@ const LOGIN_BLOCKED = 'KT-CT-1136';
 const EXPIRED = new Set(['KT-CT-1124', 'KT-CT-1120']);
 const UNAUTHORIZED = new Set(['KT-CT-1111', 'KT-CT-1112', 'KT-CT-1128', 'KT-CT-1129']);
 const KT = /^KT-[A-Z]{2}-\d{4,5}$/;
+/** A request the GraphQL schema refuses (a field or argument that no longer exists). */
+const SCHEMA_ERROR =
+  /not defined|unknown (argument|field)|cannot query field|is deprecated|was removed|not a valid|expected type/i;
+/** A field disabled by Kraken. */
+const DISABLED = 'KT-CT-1113';
 
 /** Retry-After (seconds or an HTTP date, against the Date header) -> ms; undefined otherwise. */
 export function retryAfterMs(value, dateHeader) {
@@ -86,7 +91,7 @@ async function boundedText(response, max) {
 }
 
 /** The Kraken error code of the first GraphQL error, when it has a valid one. */
-function ktOf(errors) {
+export function ktOf(errors) {
   const code = errors?.[0]?.extensions?.errorCode;
   return typeof code === 'string' && KT.test(code) ? code : undefined;
 }
@@ -169,8 +174,12 @@ export async function post({
   }
   if (!data || Object.values(data).every((v) => v === null)) {
     if (errors) {
-      const error = graphqlError(ktOf(errors));
+      const kt = ktOf(errors);
+      const error = graphqlError(kt);
       error.status = status;
+      // A document the schema refuses (a field removed): read, never echoed.
+      const message = typeof errors[0]?.message === 'string' ? errors[0].message : '';
+      error.schema = !kt && SCHEMA_ERROR.test(message.slice(0, 500));
       throw error;
     }
     throw new KrakenError('bad_response', { status });
@@ -295,6 +304,11 @@ export class KrakenSession {
       }
       if (primary && err.kt === LOGIN_BLOCKED) {
         throw new KrakenError('login_blocked', { kt: err.kt });
+      }
+      // The login by e-mail and password, deprecated by Kraken since 2026-03-18,
+      // refused by the schema or disabled: an API key is needed (never a refusal).
+      if (primary && !input.APIKey && (err.kt === DISABLED || err.schema)) {
+        throw new KrakenError('login_gone', { kt: err.kt });
       }
       throw err;
     }

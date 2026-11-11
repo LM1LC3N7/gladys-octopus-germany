@@ -37,7 +37,7 @@ import * as K from './fixtures/kraken.js';
 
 const Q = 15 * 60_000;
 const H = 3600_000;
-const malosOf = (agreements) => parseAccount(K.account({ agreements }).data);
+const malosOf = (agreements) => parseAccount(K.account({ agreements }).data, K.ID_KEY);
 
 test('Berlin time: midnights and the two changes of time', () => {
   assert.equal(new Date(fromBerlin(2026, 11, 11)).toISOString(), '2026-11-10T23:00:00.000Z');
@@ -96,14 +96,14 @@ test('accounts and MaLos: the number never leaves memory, the key is stable', ()
     'B-99999999',
   ]);
   const [m] = malosOf([K.simpleAgreement()]);
-  assert.equal(m.key, keyOf('malo', K.MALO));
+  assert.equal(m.key, keyOf(K.ID_KEY, 'malo', K.MALO));
   assert.match(m.key, /^[0-9a-f]{16}$/);
   assert.equal(m.suffix, '5678');
   assert.equal(m.propertyId, K.PROPERTY_ID);
   assert.equal(m.smart, true);
-  assert.equal(parseAccount({ account: { allProperties: 'x' } }), undefined);
+  assert.equal(parseAccount({ account: { allProperties: 'x' } }, K.ID_KEY), undefined);
   assert.equal(malosOf([]).length, 1);
-  const [dumb] = parseAccount(K.account({ smart: false }).data);
+  const [dumb] = parseAccount(K.account({ smart: false }).data, K.ID_KEY);
   assert.equal(dumb.smart, false);
 });
 
@@ -135,12 +135,19 @@ test('simple tariff: the dated rate, nothing outside the agreement', () => {
   assert.equal(priceAt(m2.agreements, K.NOW), 0.31);
   // rateValidToDate is the last day: valid until its end.
   later.unitRateInformation.grossRateInformation = [
-    { date: '2026-01-01', grossRate: '28', rateValidToDate: '2026-10-31' },
+    { date: '2026-01-01', grossRate: '28', rateValidToDate: '2026-11-01' },
     { date: '2026-11-01', grossRate: '31', rateValidToDate: null },
   ];
   const [m3] = malosOf([later]);
   assert.equal(priceAt(m3.agreements, fromBerlin(2026, 10, 31, 23, 45)), 0.28);
   assert.equal(priceAt(m3.agreements, fromBerlin(2026, 11, 1)), 0.31);
+  // rateValidToDate is exclusive: a rate without successor ends at its midnight.
+  later.unitRateInformation.grossRateInformation = [
+    { date: '2026-01-01', grossRate: '28', rateValidToDate: '2026-11-11' },
+  ];
+  const [m4] = malosOf([later]);
+  assert.equal(priceAt(m4.agreements, fromBerlin(2026, 11, 10, 23, 45)), 0.28);
+  assert.equal(priceAt(m4.agreements, fromBerlin(2026, 11, 11)), undefined);
 });
 
 test('a later agreement wins from its start (tariff change mid-period)', () => {
@@ -249,6 +256,7 @@ test('devices and dispatches: bounded and checked', () => {
       { id: 'bad id"' },
       { id: 'abc-123' },
     ]).data,
+    K.ID_KEY,
   );
   assert.deepEqual(
     list.map((d) => [d.id, d.name]),

@@ -14,7 +14,7 @@ export const SECOND = 1000;
 export const MINUTE = 60 * SECOND;
 export const HOUR = 60 * MINUTE;
 export const DAY = 24 * HOUR;
-export const CONFIG = { email: K.EMAIL, password: K.PASSWORD };
+export const CONFIG = { email: K.EMAIL, password: K.PASSWORD, id_key: K.ID_KEY };
 
 /** The operation of a GraphQL document. */
 export function opOf(query = '') {

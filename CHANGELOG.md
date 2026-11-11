@@ -24,3 +24,6 @@ the notes of the version's GitHub Release.
   to price the past.
 - Refused login, pauses (429, 5xx, KT-CT-1136) and the pace kept in `/data`;
   the test button.
+- The API key is the recommended login; the e-mail and password login, which
+  Kraken deprecated, says clearly when Octopus no longer accepts it.
+- Device ids are an HMAC of the MaLo under a key kept in the Gladys config.

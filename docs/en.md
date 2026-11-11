@@ -25,12 +25,16 @@ no boost, no meter reading sent).
 
 ## Setup
 
-1. Enter the **e-mail address** and the **password** of your Octopus account
-   (the ones of the Octopus website and app). The password is kept by Gladys
-   in its database, never shown again, and sent only to Octopus Germany to
-   log in. The integration keeps the Kraken token in memory only.
-2. If Octopus gave you an **API key** for your account (`sk_live_…`), you may
-   enter it instead: it is used alone.
+1. **Recommended: an API key** of your Octopus account (`sk_live_…`). It is
+   the durable way to log in; if you have none, ask Octopus customer service.
+   It is used alone when given.
+2. **Fallback: the e-mail address and the password** of the Octopus website
+   and app. Kraken marked this login deprecated in 2026 (removal announced
+   "on or after 2026-09-21"); it still worked in October 2026. When Octopus
+   stops accepting it, the status says so and asks for an API key.
+   Whatever you enter is kept by Gladys in its database, the secrets never
+   shown again, and sent only to Octopus Germany to log in. The integration
+   keeps the Kraken token in memory only.
 3. With several accounts on one login, enter the **account number** to read
    (empty: the first one; the status says so).
 4. Press **Test the connection** (at most once a minute): it logs in and
@@ -39,7 +43,8 @@ no boost, no meter reading sent).
    for a device nobody added (consumption, planned charges).
 6. In the energy settings of Gladys, create a contract from the template
    **Octopus Energy Germany electricity** on your meter: enter the last 4
-   digits of the MaLo (shown in the device name; empty: the first one) and
+   digits of the MaLo (shown in the device name; may be left empty only with
+   a single MaLo: with several, an empty or ambiguous value is refused) and
    your monthly standing charge (shown by the "Standing charge per month"
    feature, VAT included).
 
@@ -53,10 +58,13 @@ no boost, no meter reading sent).
 |                                  | Consumption (30 min)      | smart meter (iMSys) only, kWh, dated by Octopus |
 | Octopus Intelligent …            | Smart charge planned now  | 1 inside a planned charge, 0 outside            |
 
-The **device id** is a hash of the MaLo number (16 hex digits): the MaLo
-number itself never appears in an id, a log, the status or `/data`; the
-device name shows its last 4 digits. The MaLo, not the meter, is the
-identity: a replaced meter keeps its Gladys device and its history.
+The **device id** is a keyed hash of the MaLo number (HMAC-SHA-256, 16 hex
+digits) under a random key made at the first start and kept by Gladys in the
+integration config, outside the form (never in `/data`): without that key,
+neither the id nor `/data` gives the MaLo back, even with its last 4 digits,
+which the device name shows. The MaLo number itself never appears in an id,
+a log, the status or `/data`. The MaLo, not the meter, is the identity: a
+replaced meter keeps its Gladys device and its history.
 
 A value Octopus does not give stays unknown: nothing is ever published as 0
 in its place. The prices are published again at every quarter of an hour
@@ -90,13 +98,22 @@ consumption by half hour, the integration answers its cost:
   time): the rate of the time slot, the changes of time included;
   **fixed**: the rate, within the dates Octopus gives it;
 - a negative price costs 0 (Gladys does not take credits);
-- an unknown price is never a 0: the half hour is left without a cost and
-  Gladys asks again later.
+- an unknown price is never a 0: the whole request of Gladys fails (up to a
+  month of half hours), and Gladys asks again later. Its catch-up starts from
+  the oldest half hour without a cost and covers 31 days: one quarter of an
+  hour without a known price keeps the rest of that billing period without a
+  cost until the quarter leaves this window.
 
-The dynamic prices are only known ahead of time: the integration keeps every
-price it has seen in `/data` for 40 days, so that it can price the past.
-**Start the contract on the day the integration was installed** (or later): a
-half hour before that has no known dynamic price and would stay unpriced.
+A dynamic tariff is priced from its forecast only, never from the fixed rate
+of the product: an agreement seen dynamic once stays so (kept in `/data`),
+and an answer of Octopus carrying an error (for example KT-CT-3956 on the
+forecast) is a passing error: nothing is taken from it, the prices read
+before are kept. The dynamic prices are only known ahead of time (today and
+tomorrow): the integration keeps every price it has seen in `/data` for 40
+days, so that it can price the past, and a price kept for a quarter already
+started is never rewritten. **Start the contract on the day the integration
+was installed** (or later), and keep Gladys running: a quarter of an hour it
+never saw ahead has no known dynamic price (see above).
 
 Not included: a variable §14a grid fee (module 3), which Octopus bills on top
 for the customers who chose it. The standing charge is the amount you enter
@@ -104,32 +121,33 @@ in the contract (Gladys computes it, not the integration).
 
 ## Status and errors
 
-| Status                                               | Meaning                                              | What happens                                              |
-| ---------------------------------------------------- | ---------------------------------------------------- | --------------------------------------------------------- |
-| Octopus refused the login (KT-CT-1138, 1134 or 1135) | wrong e-mail or password                             | no request until you change them or Test succeeds         |
-| API access is not enabled (KT-CT-11334)              | Octopus disabled API access for this user            | same                                                      |
-| Octopus blocks the login for now (KT-CT-1136)        | a temporary block, seen with valid credentials       | pause of 1 hour, doubled up to 6 hours                    |
-| Octopus asked to slow down                           | HTTP 429 or KT-CT-1199                               | pause of Retry-After or 15 minutes, doubled up to 6 hours |
-| Octopus is having trouble                            | HTTP 5xx or KT-CT-7899                               | pause of 5 minutes, doubled up to 6 hours                 |
-| Octopus could not be read                            | network, timeout, unreadable answer, a query refused | tried again after 5, 10, 20, 40 then every 60 minutes     |
+| Status                                                     | Meaning                                                                                                                                                     | What happens                                                                                                 |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Octopus refused the login (KT-CT-1138, 1134 or 1135)       | the login refused: wrong e-mail, password or API key (1134 and 1135 are documented for refresh tokens; answered to this login, they are taken as a refusal) | no request until you change the credentials or Test succeeds (another account number alone does not lift it) |
+| API access is not enabled (KT-CT-11334)                    | Octopus disabled API access for this user                                                                                                                   | same                                                                                                         |
+| Octopus no longer accepts the login by e-mail and password | the schema refuses these fields, or KT-CT-1113                                                                                                              | pause of 1 hour, doubled up to 6 hours; lifted by an API key                                                 |
+| Octopus blocks the login for now (KT-CT-1136)              | a temporary block, seen with valid credentials                                                                                                              | pause of 1 hour, doubled up to 6 hours                                                                       |
+| Octopus asked to slow down                                 | HTTP 429 or KT-CT-1199                                                                                                                                      | pause of Retry-After or 15 minutes, doubled up to 6 hours                                                    |
+| Octopus is having trouble                                  | HTTP 5xx or KT-CT-7899                                                                                                                                      | pause of 5 minutes, doubled up to 6 hours                                                                    |
+| Octopus could not be read                                  | network, timeout, unreadable or partial answer, a query refused                                                                                             | tried again after 5, 10, 20, 40 then every 60 minutes                                                        |
 
 A 401 or 403 answered to a query (not to the login) is never taken as a
 refused password: one new login, then a passing error. The pauses and the
 refusal are kept in `/data` (the refusal as 8 bits of a salted hash of the
 credentials, never the credentials).
 
-**Octopus' new sign-in.** Octopus marked the login by e-mail and password of
-its API as deprecated in 2026. If the website accepts your password but the
+**Octopus' new sign-in.** If the website accepts your password but the
 integration says it is refused, your account may use the new sign-in: an API
 key of the account still works (ask Octopus for one).
 
 ## What `/data` holds
 
 `/data/octopus-germany.json`: the time of the last reads, the pause, the
-refusal (8 bits of a salted hash), the MaLos seen (hash, last 4 digits,
-tariff name, smart meter or not) and the prices of the last 40 days. Never
-the e-mail address, the password, a token, the account number nor a whole
-MaLo number.
+refusal (8 bits of a salted hash), the MaLos seen (at most 8: keyed hash,
+last 4 digits, tariff name, smart meter or not, when last seen), the
+agreements seen dynamic (keyed hash) and the prices of the last 40 days.
+Never the e-mail address, the password, a token, the id key, the account
+number nor a whole MaLo number.
 
 ## Limits
 

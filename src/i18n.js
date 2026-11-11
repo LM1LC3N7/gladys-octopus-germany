@@ -17,8 +17,8 @@ const TEXTS = {
 
   // Status of the configuration screen.
   missing: {
-    en: 'Enter the e-mail address and the password of your Octopus Energy Germany account.',
-    fr: 'Saisissez l’adresse e-mail et le mot de passe de votre compte Octopus Energy Allemagne.',
+    en: 'Enter an API key of your Octopus Energy Germany account (or its e-mail address and password).',
+    fr: 'Saisissez une clé d’API de votre compte Octopus Energy Allemagne (ou son adresse e-mail et son mot de passe).',
   },
   half: {
     en: 'Both the e-mail address and the password are needed: nothing is sent with only one.',
@@ -37,12 +37,16 @@ const TEXTS = {
     fr: 'Le numéro de compte a la forme A-1B2C3D4E : rien n’est envoyé tant qu’il n’est pas corrigé ou vidé.',
   },
   refused: {
-    en: 'Octopus refused the login ({code}). Check the e-mail address and the password, then press Test. If they work on the Octopus website, your account may use the new Octopus sign-in: enter an API key of the account instead (see the guide).',
-    fr: 'Octopus a refusé la connexion ({code}). Vérifiez l’adresse e-mail et le mot de passe, puis appuyez sur Tester. S’ils fonctionnent sur le site d’Octopus, votre compte utilise peut-être la nouvelle connexion d’Octopus : saisissez plutôt une clé d’API du compte (voir le guide).',
+    en: 'Octopus refused the login ({code}). Check the API key, or the e-mail address and the password, then press Test. If the password works on the Octopus website, your account may use the new Octopus sign-in: enter an API key of the account (see the guide).',
+    fr: 'Octopus a refusé la connexion ({code}). Vérifiez la clé d’API, ou l’adresse e-mail et le mot de passe, puis appuyez sur Tester. Si le mot de passe fonctionne sur le site d’Octopus, votre compte utilise peut-être la nouvelle connexion d’Octopus : saisissez une clé d’API du compte (voir le guide).',
   },
   apiAccess: {
     en: 'Octopus says API access is not enabled for this account user (KT-CT-11334). Ask Octopus to enable it, then press Test.',
     fr: 'Octopus indique que l’accès à l’API n’est pas activé pour cet utilisateur (KT-CT-11334). Demandez à Octopus de l’activer, puis appuyez sur Tester.',
+  },
+  loginGone: {
+    en: 'Octopus no longer accepts the login by e-mail address and password: enter an API key of your account (see the guide). Next try at {time}.',
+    fr: 'Octopus n’accepte plus la connexion par adresse e-mail et mot de passe : saisissez une clé d’API de votre compte (voir le guide). Nouvel essai à {time}.',
   },
   loginBlocked: {
     en: 'Octopus blocks the login for now (KT-CT-1136), with valid credentials too: next try at {time}.',

@@ -128,7 +128,7 @@
   {
     "name": "refusal kept after new credentials",
     "file": "src/app.js",
-    "from": "if (changed && this.credKey !== undefined && this.refused) {",
+    "from": "if (credsChanged && this.refused) {",
     "to": "if (false) {"
   },
   {
@@ -202,5 +202,137 @@
     "file": "src/app.js",
     "from": "return matches.length === 1 ? matches[0] : undefined;",
     "to": "return matches[0];"
+  },
+  {
+    "name": "pause de Retry-After non plafonnée à 6 h",
+    "file": "src/app.js",
+    "from": "const ms = Math.min(PAUSE_MAX, Math.max(asked, base * 2 ** (count - 1)));",
+    "to": "const ms = Math.max(asked, base * 2 ** (count - 1));"
+  },
+  {
+    "name": "pause relue de /data non plafonnée",
+    "file": "src/app.js",
+    "from": "const left = Math.min(Math.max(0, pause.until - now), PAUSE_MAX);",
+    "to": "const left = Math.max(0, pause.until - now);"
+  },
+  {
+    "name": "429 des tarifs fixes (abonnement) avalé, pas de pause",
+    "file": "src/app.js",
+    "from": "      if (PAUSING.has(err?.code) || err?.code === 'stopped') throw err;\n      this.log.warn(`Standing charges not read",
+    "to": "      this.log.warn(`Standing charges not read"
+  },
+  {
+    "name": "429 de la consommation avalé, pas de pause",
+    "file": "src/app.js",
+    "from": "        if (PAUSING.has(err?.code) || err?.code === 'stopped' || err?.code === 'refused') throw err;\n        // One meter failing",
+    "to": "        // One meter failing"
+  },
+  {
+    "name": "rattrapage 7 jours marqué fait malgré un échec",
+    "file": "src/app.js",
+    "from": "if (full && !problem) this.data.lastFull = today;",
+    "to": "if (full) this.data.lastFull = today;"
+  },
+  {
+    "name": "KT-CT-11334 plus un refus",
+    "file": "src/kraken/client.js",
+    "from": "if (primary && err.kt && (REFUSED.has(err.kt) || err.kt === API_ACCESS)) {",
+    "to": "if (primary && err.kt && REFUSED.has(err.kt)) {"
+  },
+  {
+    "name": "empreinte du refus sans le mot de passe",
+    "file": "src/app.js",
+    "from": "\\u0000${credentials.password ?? ''}`",
+    "to": "`"
+  },
+  {
+    "name": "Wh pris pour des kWh",
+    "file": "src/kraken/model.js",
+    "from": "if (unit === 'wh') kwh /= 1000;",
+    "to": ""
+  },
+  {
+    "name": "getConfig en échec après stop() réarme",
+    "file": "src/app.js",
+    "from": "    } catch (err) {\n      if (this.stopped || epoch !== this.stopEpoch) return;",
+    "to": "    } catch (err) {"
+  },
+  {
+    "name": "fin de contrat illisible prise pour ouverte",
+    "file": "src/kraken/model.js",
+    "from": "if (from === undefined || (a?.validTo && to === undefined) || (to !== undefined && to <= from)) {",
+    "to": "if (from === undefined || (to !== undefined && to <= from)) {"
+  },
+  {
+    "name": "contrat le plus ancien gagne au chevauchement",
+    "file": "src/kraken/model.js",
+    "from": "(!hit || a.from >= hit.from)",
+    "to": "!hit"
+  },
+  {
+    "name": "account answer with errors used",
+    "file": "src/app.js",
+    "from": "if (errors) throw new KrakenError('partial', { kt: ktOf(errors) });",
+    "to": ""
+  },
+  {
+    "name": "kept past price rewritten",
+    "file": "src/app.js",
+    "from": "if (q <= now && kept[index] !== undefined) continue;",
+    "to": ""
+  },
+  {
+    "name": "dynamic agreement remembered forgotten",
+    "file": "src/app.js",
+    "from": "else if (known.has(key)) a.dynamic = true;",
+    "to": ""
+  },
+  {
+    "name": "dynamic flag ignored by the price",
+    "file": "src/kraken/model.js",
+    "from": "if (a.dynamic || a.forecast.length) {",
+    "to": "if (a.forecast.length) {"
+  },
+  {
+    "name": "MaLos seen replaced, not merged",
+    "file": "src/app.js",
+    "from": "const meters = [...seen, ...this.data.meters.filter((x) => !seen.some((m) => m.key === x.key))]",
+    "to": "const meters = [...seen]"
+  },
+  {
+    "name": "empty suffix takes the first of several",
+    "file": "src/app.js",
+    "from": "if (!raw) return known.length === 1 ? known[0] : undefined;",
+    "to": "if (!raw) return known[0];"
+  },
+  {
+    "name": "e-mail login gone not detected",
+    "file": "src/kraken/client.js",
+    "from": "if (primary && !input.APIKey && (err.kt === DISABLED || err.schema)) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "stale current price",
+    "file": "src/app.js",
+    "from": "    if (!malo) return { price: null };\n",
+    "to": ""
+  },
+  {
+    "name": "account number lifts a refusal",
+    "file": "src/app.js",
+    "from": "this.credKey !== undefined && JSON.stringify(credentials) !== this.credOnly;",
+    "to": "this.credKey !== undefined && credKey !== this.credKey;"
+  },
+  {
+    "name": "rateValidToDate inclusive",
+    "file": "src/kraken/model.js",
+    "from": "    out.push({ since, until: last, price });",
+    "to": "    out.push({ since, until: last === undefined ? undefined : last + DAY, price });"
+  },
+  {
+    "name": "id key not required before reading",
+    "file": "src/app.js",
+    "from": "    if (!(await this.ensureIdKey(gen))) {\n      this.failures += 1;",
+    "to": "    if (false) {\n      this.failures += 1;"
   }
 ]

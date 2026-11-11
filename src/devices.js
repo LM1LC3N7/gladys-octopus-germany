@@ -3,13 +3,14 @@
 //
 // External ids (forever):
 //   ext:<selector>:malo:<key>     an electricity market location (MaLo) of the
-//                                 account; key = 16 hex digits of a SHA-256 of
-//                                 the MaLo number (the number itself is never
+//                                 account; key = 16 hex digits of an HMAC-SHA-256
+//                                 of the MaLo number under the id key kept in the
+//                                 Gladys config (the number itself is never
 //                                 in an id, a log, a status or /data). The
 //                                 MaLo, not the meter: a replaced meter keeps
 //                                 its Gladys device and history.
 //   ext:<selector>:flex:<key>     an Intelligent Octopus device (car, charge
-//                                 point); key = the same hash of its Kraken id.
+//                                 point); key = the same HMAC of its Kraken id.
 // -----------------------------------------------------------------------------
 
 import {

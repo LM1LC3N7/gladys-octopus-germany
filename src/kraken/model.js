@@ -7,8 +7,9 @@
 // Prices are gross (VAT included), in EUR per kWh (the API gives cents). The
 // price of an instant comes, in this order, from:
 //   1. the agreement in force then (validFrom <= t < validTo, not revoked);
-//   2. a dynamic tariff (an agreement with a unit-rate forecast): the forecast
-//      slot covering t, nothing else (never a fixed rate guessed for it);
+//   2. a dynamic tariff (a forecast sent, a product named dynamic, or an
+//      agreement the app saw dynamic once): the forecast slot covering t,
+//      nothing else (never a fixed rate guessed for it);
 //   3. a time-of-use tariff (Intelligent Octopus Go, Heat...): the rate whose
 //      activation rule covers the local time of Germany at t;
 //   4. a simple tariff: its rate;
@@ -17,7 +18,7 @@
 // it kept in /data). Never a silent zero.
 // -----------------------------------------------------------------------------
 
-import { createHash } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import {
   DAY,
   HALF_HOUR,
@@ -72,9 +73,14 @@ export function eurPerKwh(cents) {
   return Math.abs(eur) <= MAX_PRICE ? Math.round(eur * 1e6) / 1e6 : undefined;
 }
 
-/** The stable, non-reversible key of an id (16 hex digits): never the id itself. */
-export const keyOf = (kind, id) =>
-  createHash('sha256').update(`octopus-germany:${kind}:${id}`, 'utf8').digest('hex').slice(0, 16);
+/**
+ * The stable key of an id (16 hex digits): an HMAC-SHA-256 under the secret
+ * `idKey` of this installation (kept in the Gladys config, outside the form,
+ * never in /data): neither /data nor a device id gives the id back, even
+ * with its last 4 digits (a MaLo has only about 10^10 values).
+ */
+export const keyOf = (idKey, kind, id) =>
+  createHmac('sha256', idKey).update(`${kind}:${id}`, 'utf8').digest('hex').slice(0, 16);
 
 /** The account numbers of `viewer.accounts`, valid ones only. */
 export function parseAccounts(data) {
@@ -92,8 +98,8 @@ function datedRates(info) {
     const price = eurPerKwh(e?.grossRate);
     if (since === undefined || price === undefined) continue;
     const last = parseLocalDate(e?.rateValidToDate);
-    // rateValidToDate is the last day of the rate: valid until the next midnight.
-    out.push({ since, until: last === undefined ? undefined : last + DAY, price });
+    // rateValidToDate is exclusive (the schema: "the date until which the rate is active (exclusive)").
+    out.push({ since, until: last, price });
   }
   return out;
 }
@@ -166,6 +172,12 @@ export function parseAgreement(a) {
     rate: tou ? undefined : parseRate(info),
     rates: [],
     forecast: parseForecast(a?.unitRateForecast),
+    // A dynamic tariff is priced from its forecast only: a product named so,
+    // or a forecast sent (even unreadable) makes it one; the app also
+    // remembers the agreements seen dynamic once (/data).
+    dynamic:
+      (Array.isArray(a?.unitRateForecast) && a.unitRateForecast.length > 0) ||
+      /dynami/i.test(`${a?.product?.code ?? ''} ${a?.product?.fullName ?? ''}`),
   };
   if (tou) {
     for (const r of list(info.rates, 12)) {
@@ -188,7 +200,7 @@ export function parseAgreement(a) {
  * [{ key, suffix, propertyId, malo, smart, agreements }], sorted by key.
  * `malo` (the full number) stays in memory: it filters the measurements.
  */
-export function parseAccount(data) {
+export function parseAccount(data, idKey) {
   const properties = data?.account?.allProperties;
   if (!Array.isArray(properties)) return undefined;
   const malos = [];
@@ -200,7 +212,7 @@ export function parseAccount(data) {
       if (!MALO.test(malo) || malos.some((x) => x.malo === malo)) continue;
       const meters = list(m?.meters, 4);
       malos.push({
-        key: keyOf('malo', malo),
+        key: keyOf(idKey, 'malo', malo),
         suffix: malo.slice(-4),
         propertyId,
         malo,
@@ -231,7 +243,8 @@ export function parseStandingCharges(data) {
           const amount = strictNumber(e?.grossRate);
           if (since === undefined || amount === undefined || amount < 0 || amount > 1000) continue;
           const last = parseLocalDate(e?.rateValidToDate);
-          dated.push({ since, until: last === undefined ? undefined : last + DAY, amount });
+          // rateValidToDate is exclusive, as for the unit rates.
+          dated.push({ since, until: last, amount });
         }
         if (dated.length) out.set(id, dated);
       }
@@ -253,7 +266,8 @@ export function agreementAt(agreements, t) {
 export function priceAt(agreements, t) {
   const a = agreementAt(agreements, t);
   if (!a) return undefined;
-  if (a.forecast.length) {
+  if (a.dynamic || a.forecast.length) {
+    // Never the fixed rate of a dynamic product: unknown outside its forecast.
     return a.forecast.find((f) => f.from <= t && t < f.to)?.price;
   }
   if (a.kind === 'tou') {
@@ -268,7 +282,7 @@ export function priceAt(agreements, t) {
 export function labelAt(agreements, t) {
   const a = agreementAt(agreements, t);
   if (!a) return undefined;
-  if (a.kind === 'tou' && !a.forecast.length) {
+  if (a.kind === 'tou' && !a.dynamic && !a.forecast.length) {
     const s = secondsOfDay(t);
     const rate = a.rates.find((r) => r.slots.some((slot) => inSlot(s, slot.start, slot.end)));
     if (rate?.name) return clean(`${a.name} ${rate.name}`, 64);
@@ -365,7 +379,7 @@ export function halfHours(quarters, now) {
 }
 
 /** The Intelligent (SmartFlex) devices of the account: [{ id, key, name, type }]. */
-export function parseDevices(data) {
+export function parseDevices(data, idKey) {
   const devices = data?.devices;
   if (!Array.isArray(devices)) return undefined;
   const out = [];
@@ -374,7 +388,7 @@ export function parseDevices(data) {
     if (!DEVICE.test(id) || out.some((x) => x.id === id)) continue;
     out.push({
       id,
-      key: keyOf('device', id),
+      key: keyOf(idKey, 'device', id),
       name: clean(d?.name, 40),
       type: clean(d?.deviceType, 32),
     });

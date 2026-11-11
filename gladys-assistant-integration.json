@@ -21,72 +21,102 @@
         "fr": "Compte Octopus Energy Allemagne"
       },
       "description": {
-        "en": "Unofficial connector, not affiliated with Octopus Energy. For Octopus Energy customers in Germany: enter the e-mail address and the password of your Octopus account (the ones of the Octopus website and app). The integration reads your electricity market locations (MaLo), their tariff (fixed, time-of-use such as Intelligent Octopus Go, or dynamic), the smart-meter consumption (iMSys) for the Gladys energy monitoring and the smart charges planned for your Intelligent devices. Read-only: nothing is ever changed on your account. Then create an energy contract from the \"Octopus Energy Germany electricity\" template.",
-        "fr": "Connecteur non officiel, sans lien avec Octopus Energy. Pour les clients d'Octopus Energy en Allemagne : saisissez l'adresse e-mail et le mot de passe de votre compte Octopus (ceux du site et de l'app Octopus). L'intégration lit vos points de livraison d'électricité (MaLo), leur tarif (fixe, à plages horaires comme Intelligent Octopus Go, ou dynamique), la consommation du compteur communicant (iMSys) pour le suivi énergétique de Gladys et les recharges pilotées prévues de vos appareils Intelligent. Lecture seule : rien n'est jamais modifié sur votre compte. Créez ensuite un contrat d'énergie depuis le modèle « Octopus Energy Allemagne électricité »."
+        "en": "Unofficial connector, not affiliated with Octopus Energy. For Octopus Energy customers in Germany. Recommended: an API key of your Octopus account (sk_live_…, ask Octopus customer service if you have none). The e-mail address and password of the Octopus website still work as a fallback, but Kraken deprecated that login in 2026 and may remove it. The integration reads your electricity market locations (MaLo), their tariff (fixed, time-of-use such as Intelligent Octopus Go, or dynamic), the smart-meter consumption (iMSys) for the Gladys energy monitoring and the smart charges planned for your Intelligent devices. Read-only: nothing is ever changed on your account. Then create an energy contract from the \"Octopus Energy Germany electricity\" template.",
+        "fr": "Connecteur non officiel, sans lien avec Octopus Energy. Pour les clients d'Octopus Energy en Allemagne. Recommandé : une clé d'API de votre compte Octopus (sk_live_…, demandez-la au service client d'Octopus si vous n'en avez pas). L'adresse e-mail et le mot de passe du site d'Octopus fonctionnent encore en repli, mais Kraken a déprécié cette connexion en 2026 et peut la retirer. L'intégration lit vos points de livraison d'électricité (MaLo), leur tarif (fixe, à plages horaires comme Intelligent Octopus Go, ou dynamique), la consommation du compteur communicant (iMSys) pour le suivi énergétique de Gladys et les recharges pilotées prévues de vos appareils Intelligent. Lecture seule : rien n'est jamais modifié sur votre compte. Créez ensuite un contrat d'énergie depuis le modèle « Octopus Energy Allemagne électricité »."
       },
       "links": [
         {
           "url": "https://github.com/LM1LC3N7/gladys-octopus-germany/blob/main/docs/fr.md",
-          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+          "label": {
+            "en": "Guide (French)",
+            "fr": "Guide (français)"
+          }
         },
         {
           "url": "https://github.com/LM1LC3N7/gladys-octopus-germany/blob/main/docs/en.md",
-          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
+          "label": {
+            "en": "Guide (English)",
+            "fr": "Guide (anglais)"
+          }
         },
         {
           "url": "https://developer.oeg-kraken.energy/",
-          "label": { "en": "The Octopus Germany API", "fr": "L'API d'Octopus Allemagne" }
+          "label": {
+            "en": "The Octopus Germany API",
+            "fr": "L'API d'Octopus Allemagne"
+          }
         }
       ]
+    },
+    {
+      "key": "api_key",
+      "type": "secret",
+      "required": false,
+      "label": {
+        "en": "API key (recommended)",
+        "fr": "Clé d'API (recommandée)"
+      },
+      "description": {
+        "en": "An API key of your Octopus account (sk_live_…): the durable way to log in, used alone when given. Kept by Gladys in its database, never shown again, sent only to Octopus Energy Germany.",
+        "fr": "Une clé d'API de votre compte Octopus (sk_live_…) : la connexion durable, utilisée seule si elle est saisie. Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement à Octopus Energy Allemagne."
+      }
     },
     {
       "key": "email",
       "type": "string",
       "required": false,
-      "label": { "en": "E-mail address", "fr": "Adresse e-mail" },
-      "description": {
-        "en": "The e-mail address you log in with on the Octopus website.",
-        "fr": "L'adresse e-mail avec laquelle vous vous connectez sur le site d'Octopus."
+      "label": {
+        "en": "E-mail address (fallback)",
+        "fr": "Adresse e-mail (repli)"
       },
-      "placeholder": { "en": "e.g. name@example.com", "fr": "ex. nom@example.com" }
+      "description": {
+        "en": "Without an API key: the e-mail address you log in with on the Octopus website (a login Kraken deprecated in 2026).",
+        "fr": "Sans clé d'API : l'adresse e-mail avec laquelle vous vous connectez sur le site d'Octopus (connexion dépréciée par Kraken en 2026)."
+      },
+      "placeholder": {
+        "en": "e.g. name@example.com",
+        "fr": "ex. nom@example.com"
+      }
     },
     {
       "key": "password",
       "type": "secret",
       "required": false,
-      "label": { "en": "Password", "fr": "Mot de passe" },
+      "label": {
+        "en": "Password (fallback)",
+        "fr": "Mot de passe (repli)"
+      },
       "description": {
         "en": "Kept by Gladys in its database, never shown again, sent only to Octopus Energy Germany (api.oeg-kraken.energy) to log in.",
         "fr": "Gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à Octopus Energy Allemagne (api.oeg-kraken.energy) pour se connecter."
       }
     },
     {
-      "key": "api_key",
-      "type": "secret",
-      "required": false,
-      "label": { "en": "API key (optional)", "fr": "Clé d'API (facultative)" },
-      "description": {
-        "en": "Only if Octopus gave you an API key for your account (sk_live_…): used instead of the e-mail address and the password. Kept by Gladys in its database, never shown again, sent only to Octopus Energy Germany.",
-        "fr": "Seulement si Octopus vous a donné une clé d'API pour votre compte (sk_live_…) : utilisée à la place de l'adresse e-mail et du mot de passe. Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement à Octopus Energy Allemagne."
-      }
-    },
-    {
       "key": "account_number",
       "type": "string",
       "required": false,
-      "label": { "en": "Account number (optional)", "fr": "Numéro de compte (facultatif)" },
+      "label": {
+        "en": "Account number (optional)",
+        "fr": "Numéro de compte (facultatif)"
+      },
       "description": {
         "en": "Only needed when your login has several Octopus accounts: empty, the first one is read.",
         "fr": "Utile seulement si votre connexion a plusieurs comptes Octopus : vide, le premier est lu."
       },
-      "placeholder": { "en": "e.g. A-1B2C3D4E", "fr": "ex. A-1B2C3D4E" }
+      "placeholder": {
+        "en": "e.g. A-1B2C3D4E",
+        "fr": "ex. A-1B2C3D4E"
+      }
     }
   ],
   "actions": [
     {
       "key": "test_connection",
       "timeout_seconds": 60,
-      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "label": {
+        "en": "Test the connection",
+        "fr": "Tester la connexion"
+      },
       "description": {
         "en": "Logs in and lists the accounts of the login (at most once a minute).",
         "fr": "Se connecte et liste les comptes de la connexion (au plus une fois par minute)."
@@ -116,12 +146,12 @@
             "type": "string",
             "required": false,
             "label": {
-              "en": "Last 4 digits of the MaLo (empty: the first one)",
-              "fr": "4 derniers chiffres de la MaLo (vide : la première)"
+              "en": "Last 4 digits of the MaLo (empty: the only one)",
+              "fr": "4 derniers chiffres de la MaLo (vide : la seule)"
             },
             "description": {
-              "en": "Shown in the name of the device; only needed with several electricity market locations.",
-              "fr": "Visibles dans le nom de l'appareil ; utiles seulement avec plusieurs points de livraison d'électricité."
+              "en": "Shown in the name of the device; required with several electricity market locations.",
+              "fr": "Visibles dans le nom de l'appareil ; obligatoires avec plusieurs points de livraison d'électricité."
             }
           },
           {
@@ -129,7 +159,10 @@
             "type": "number",
             "unit": "EUR/month",
             "default": 0,
-            "label": { "en": "Standing charge per month", "fr": "Abonnement par mois" },
+            "label": {
+              "en": "Standing charge per month",
+              "fr": "Abonnement par mois"
+            },
             "description": {
               "en": "Shown by the \"Standing charge per month\" feature of the device, VAT included.",
               "fr": "Affiché par la fonctionnalité « Standing charge per month » de l'appareil, TVA incluse."

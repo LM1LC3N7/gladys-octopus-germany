@@ -8,6 +8,8 @@ export const EMAIL = 'kunde@example.com';
 export const PASSWORD = 'S3cret-Pass word!';
 export const ACCOUNT_NUMBER = 'A-1B2C3D4E';
 export const MALO = '50412345678';
+/** The id key of the installation (Gladys config, outside the form). */
+export const ID_KEY = 'ab'.repeat(32);
 export const PROPERTY_ID = '987654';
 /** Wednesday 2026-11-04 10:07 in Germany (UTC+1): in the past (the fake Gladys checks elapsed intervals on the real clock). */
 export const NOW = Date.UTC(2026, 10, 4, 9, 7);

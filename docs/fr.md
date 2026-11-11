@@ -26,13 +26,16 @@ appareils (ni recharge pilotée, ni boost, ni relevé envoyé).
 
 ## Mise en route
 
-1. Saisissez l'**adresse e-mail** et le **mot de passe** de votre compte
-   Octopus (ceux du site et de l'app Octopus). Le mot de passe est gardé par
-   Gladys dans sa base, jamais réaffiché, et envoyé seulement à Octopus
-   Allemagne pour se connecter. L'intégration garde le jeton Kraken en
-   mémoire seulement.
-2. Si Octopus vous a donné une **clé d'API** pour votre compte (`sk_live_…`),
-   vous pouvez la saisir à la place : elle est alors utilisée seule.
+1. **Recommandé : une clé d'API** de votre compte Octopus (`sk_live_…`).
+   C'est la connexion durable ; si vous n'en avez pas, demandez-la au service
+   client d'Octopus. Elle est utilisée seule si elle est saisie.
+2. **En repli : l'adresse e-mail et le mot de passe** du site et de l'app
+   Octopus. Kraken a marqué cette connexion comme dépréciée en 2026 (retrait
+   annoncé « à partir du 2026-09-21 ») ; elle fonctionnait encore en octobre 2026. Quand Octopus ne l'acceptera plus, le statut le dira et demandera une
+   clé d'API.
+   Ce que vous saisissez est gardé par Gladys dans sa base, les secrets jamais
+   réaffichés, et envoyé seulement à Octopus Allemagne pour se connecter.
+   L'intégration garde le jeton Kraken en mémoire seulement.
 3. Avec plusieurs comptes sur une même connexion, saisissez le **numéro de
    compte** à lire (vide : le premier ; le statut le signale).
 4. Appuyez sur **Tester la connexion** (au plus une fois par minute) : elle
@@ -42,8 +45,9 @@ appareils (ni recharge pilotée, ni boost, ni relevé envoyé).
    prévues).
 6. Dans les réglages énergie de Gladys, créez un contrat depuis le modèle
    **Octopus Energy Allemagne électricité** sur votre compteur : saisissez les
-   4 derniers chiffres de la MaLo (visibles dans le nom de l'appareil ; vide :
-   la première) et votre abonnement mensuel (affiché par la fonctionnalité
+   4 derniers chiffres de la MaLo (visibles dans le nom de l'appareil ; vide
+   seulement avec une seule MaLo : avec plusieurs, une valeur vide ou ambiguë
+   est refusée) et votre abonnement mensuel (affiché par la fonctionnalité
    « Standing charge per month », TVA incluse).
 
 ## Appareils
@@ -56,12 +60,15 @@ appareils (ni recharge pilotée, ni boost, ni relevé envoyé).
 |                                  | Consumption (30 min)      | compteur communicant (iMSys) seulement, kWh, datée par Octopus |
 | Octopus Intelligent …            | Smart charge planned now  | 1 pendant une recharge prévue, 0 sinon                         |
 
-L'**identifiant de l'appareil** est une empreinte du numéro de MaLo
-(16 chiffres hexadécimaux) : le numéro de MaLo lui-même n'apparaît jamais
-dans un identifiant, un journal, le statut ni `/data` ; le nom de l'appareil
-en montre les 4 derniers chiffres. C'est la MaLo, pas le compteur, qui fait
-l'identité : un compteur remplacé garde son appareil Gladys et son
-historique.
+L'**identifiant de l'appareil** est une empreinte à clé du numéro de MaLo
+(HMAC-SHA-256, 16 chiffres hexadécimaux) sous une clé aléatoire créée au
+premier démarrage et gardée par Gladys dans la configuration de
+l'intégration, hors du formulaire (jamais dans `/data`) : sans cette clé, ni
+l'identifiant ni `/data` ne redonnent la MaLo, même avec ses 4 derniers
+chiffres, que le nom de l'appareil montre. Le numéro de MaLo lui-même
+n'apparaît jamais dans un identifiant, un journal, le statut ni `/data`.
+C'est la MaLo, pas le compteur, qui fait l'identité : un compteur remplacé
+garde son appareil Gladys et son historique.
 
 Une valeur qu'Octopus ne donne pas reste inconnue : rien n'est jamais publié
 comme 0 à sa place. Les prix sont republiés à chaque quart d'heure d'après ce
@@ -98,14 +105,23 @@ consommation par demi-heure, l'intégration en répond le coût :
   0 h à 5 h, heure allemande) : le prix de la plage, changements d'heure
   compris ; **fixe** : le prix, dans les dates qu'Octopus lui donne ;
 - un prix négatif coûte 0 (Gladys ne prend pas de crédit) ;
-- un prix inconnu n'est jamais un 0 : la demi-heure reste sans coût et
-  Gladys redemande plus tard.
+- un prix inconnu n'est jamais un 0 : toute la demande de Gladys échoue
+  (jusqu'à un mois de demi-heures), et Gladys redemande plus tard. Son
+  rattrapage part de la plus ancienne demi-heure sans coût et couvre 31
+  jours : un seul quart d'heure sans prix connu laisse le reste de cette
+  période de facturation sans coût jusqu'à ce qu'il sorte de cette fenêtre.
 
-Les prix dynamiques ne sont connus qu'à l'avance : l'intégration garde dans
-`/data` chaque prix vu pendant 40 jours, pour tarifer le passé. **Faites
-commencer le contrat le jour de l'installation de l'intégration** (ou plus
-tard) : une demi-heure antérieure n'a pas de prix dynamique connu et resterait
-sans coût.
+Un tarif dynamique est tarifé d'après sa prévision seulement, jamais d'après
+le prix fixe du produit : un contrat vu dynamique une fois le reste (noté
+dans `/data`), et une réponse d'Octopus qui porte une erreur (par exemple
+KT-CT-3956 sur la prévision) est une erreur passagère : rien n'en est tiré,
+les prix lus avant sont gardés. Les prix dynamiques ne sont connus qu'à
+l'avance (aujourd'hui et demain) : l'intégration garde dans `/data` chaque
+prix vu pendant 40 jours, pour tarifer le passé, et le prix gardé d'un quart
+d'heure déjà commencé n'est jamais réécrit. **Faites commencer le contrat le
+jour de l'installation de l'intégration** (ou plus tard), et laissez Gladys
+tourner : un quart d'heure jamais vu à l'avance n'a pas de prix dynamique
+connu (voir plus haut).
 
 Non inclus : un tarif de réseau variable §14a (module 3), qu'Octopus facture
 en plus aux clients qui l'ont choisi. L'abonnement est le montant saisi dans
@@ -113,33 +129,34 @@ le contrat (Gladys le calcule, pas l'intégration).
 
 ## Statut et erreurs
 
-| Statut                                                   | Sens                                                     | Ce qui se passe                                                              |
-| -------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Octopus a refusé la connexion (KT-CT-1138, 1134 ou 1135) | e-mail ou mot de passe faux                              | aucune requête tant que vous ne les changez pas ou que Tester ne réussit pas |
-| L'accès à l'API n'est pas activé (KT-CT-11334)           | Octopus a désactivé l'accès à l'API pour cet utilisateur | idem                                                                         |
-| Octopus bloque la connexion pour le moment (KT-CT-1136)  | blocage passager, vu avec des identifiants valides       | pause d'1 heure, doublée jusqu'à 6 heures                                    |
-| Octopus a demandé de ralentir                            | HTTP 429 ou KT-CT-1199                                   | pause de Retry-After ou 15 minutes, doublée jusqu'à 6 heures                 |
-| Octopus a un problème                                    | HTTP 5xx ou KT-CT-7899                                   | pause de 5 minutes, doublée jusqu'à 6 heures                                 |
-| Octopus n'a pas pu être lu                               | réseau, délai, réponse illisible, requête refusée        | nouvel essai après 5, 10, 20, 40 puis toutes les 60 minutes                  |
+| Statut                                                         | Sens                                                                                                                                                                                    | Ce qui se passe                                                                                                                           |
+| -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| Octopus a refusé la connexion (KT-CT-1138, 1134 ou 1135)       | connexion refusée : e-mail, mot de passe ou clé d'API faux (1134 et 1135 sont documentés pour les jetons de rafraîchissement ; répondus à cette connexion, ils sont pris pour un refus) | aucune requête tant que vous ne changez pas les identifiants ou que Tester ne réussit pas (un autre numéro de compte seul ne le lève pas) |
+| L'accès à l'API n'est pas activé (KT-CT-11334)                 | Octopus a désactivé l'accès à l'API pour cet utilisateur                                                                                                                                | idem                                                                                                                                      |
+| Octopus n'accepte plus la connexion par e-mail et mot de passe | le schéma refuse ces champs, ou KT-CT-1113                                                                                                                                              | pause d'1 heure, doublée jusqu'à 6 heures ; levée par une clé d'API                                                                       |
+| Octopus bloque la connexion pour le moment (KT-CT-1136)        | blocage passager, vu avec des identifiants valides                                                                                                                                      | pause d'1 heure, doublée jusqu'à 6 heures                                                                                                 |
+| Octopus a demandé de ralentir                                  | HTTP 429 ou KT-CT-1199                                                                                                                                                                  | pause de Retry-After ou 15 minutes, doublée jusqu'à 6 heures                                                                              |
+| Octopus a un problème                                          | HTTP 5xx ou KT-CT-7899                                                                                                                                                                  | pause de 5 minutes, doublée jusqu'à 6 heures                                                                                              |
+| Octopus n'a pas pu être lu                                     | réseau, délai, réponse illisible ou partielle, requête refusée                                                                                                                          | nouvel essai après 5, 10, 20, 40 puis toutes les 60 minutes                                                                               |
 
 Un 401 ou 403 répondu à une requête (pas à la connexion) n'est jamais pris
 pour un mot de passe refusé : une nouvelle connexion, puis une erreur
 passagère. Les pauses et le refus sont gardés dans `/data` (le refus comme
 8 bits d'une empreinte salée des identifiants, jamais les identifiants).
 
-**La nouvelle connexion d'Octopus.** Octopus a marqué comme dépréciée en 2026
-la connexion par e-mail et mot de passe de son API. Si le site accepte votre
-mot de passe mais que l'intégration le dit refusé, votre compte utilise
-peut-être la nouvelle connexion : une clé d'API du compte fonctionne encore
-(demandez-en une à Octopus).
+**La nouvelle connexion d'Octopus.** Si le site accepte votre mot de passe
+mais que l'intégration le dit refusé, votre compte utilise peut-être la
+nouvelle connexion : une clé d'API du compte fonctionne encore (demandez-en
+une à Octopus).
 
 ## Ce que contient `/data`
 
 `/data/octopus-germany.json` : l'heure des dernières lectures, la pause, le
-refus (8 bits d'une empreinte salée), les MaLo vues (empreinte, 4 derniers
-chiffres, nom du tarif, compteur communicant ou non) et les prix des 40
-derniers jours. Jamais l'adresse e-mail, le mot de passe, un jeton, le numéro
-de compte ni un numéro de MaLo complet.
+refus (8 bits d'une empreinte salée), les MaLo vues (8 au plus : empreinte à
+clé, 4 derniers chiffres, nom du tarif, compteur communicant ou non, dernière
+fois vue), les contrats vus dynamiques (empreinte à clé) et les prix des 40
+derniers jours. Jamais l'adresse e-mail, le mot de passe, un jeton, la clé
+des identifiants, le numéro de compte ni un numéro de MaLo complet.
 
 ## Limites
 
