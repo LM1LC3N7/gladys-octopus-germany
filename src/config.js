@@ -1,45 +1,67 @@
 // -----------------------------------------------------------------------------
-// Integration configuration.
-//
-// The configuration is filled in by the user in Gladys, from the `config_schema`
-// declared in `gladys-assistant-integration.json`. The SDK fetches it for you
-// (`gladys.getConfig()`) and notifies you of every change through
-// `gladys.onConfigUpdated()`.
-//
-// This module only provides defaults and normalizes the received object, so the
-// rest of the code never has to deal with `undefined`.
+// The configuration of the form, normalized: the e-mail address and the
+// password of the Octopus Energy Germany customer account (or an API key of
+// the account), and the account number when the login has several. Nothing
+// here talks to the network.
 // -----------------------------------------------------------------------------
 
-// Defaults: they MUST stay consistent with the `default` values declared in the
-// `config_schema` of the manifest.
-export const DEFAULT_CONFIG = {
-  latitude: 48.8566, // Paris
-  longitude: 2.3522,
-  unit: 'celsius', // 'celsius' | 'fahrenheit'
-  // Seconds between two reads of the polled sensors. Gladys polls at most once
-  // a minute: slower intervals are applied by skipping polls (see
-  // createPoller in src/devices/index.js).
-  poll_frequency: 300,
-  // Reserved key (NOT in config_schema): because the manifest declares both
-  // 'local' and 'cloud' in its `transports` field, Gladys shows a standard
-  // "Prefer the local connection" toggle and sends the user's choice here.
-  // Read-only for the integration; defaults to true.
-  GLADYS_PREFER_LOCAL: true,
+/** Control characters (CR, LF, tab included): never in a credential nor an id. */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/;
+
+const text = (value, max) => {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.length <= max && !CONTROL.test(trimmed) ? trimmed : undefined;
 };
 
+const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,63}$/;
+const ACCOUNT = /^[A-Z]-[A-Z0-9]{4,16}$/;
+const API_KEY = /^[\x21-\x7e]{8,200}$/;
+
 /**
- * Merge the user config with the defaults.
- * @param {Record<string, unknown>} raw config returned by the SDK
+ * `{ email, password, apiKey, accountNumber, problem }`: `problem` names what
+ * keeps the integration from logging in (nothing is sent then).
  */
 export function normalizeConfig(raw = {}) {
-  return {
-    ...DEFAULT_CONFIG,
-    ...raw,
-    // Force the types: config may arrive as strings from a form.
-    latitude: Number(raw.latitude ?? DEFAULT_CONFIG.latitude),
-    longitude: Number(raw.longitude ?? DEFAULT_CONFIG.longitude),
-    poll_frequency: Number(raw.poll_frequency ?? DEFAULT_CONFIG.poll_frequency),
-    // The preference is a boolean; anything but an explicit false means true.
-    GLADYS_PREFER_LOCAL: raw.GLADYS_PREFER_LOCAL !== false,
+  const email = text(raw?.email, 254);
+  // A password is taken as typed (spaces included), only bounded and without control characters.
+  const password =
+    raw?.password === undefined || raw?.password === null
+      ? ''
+      : typeof raw.password === 'string' &&
+          raw.password.length <= 256 &&
+          !CONTROL.test(raw.password)
+        ? raw.password
+        : undefined;
+  const apiKey = text(raw?.api_key, 200);
+  const account = text(raw?.account_number, 40);
+  const config = {
+    email: email ?? '',
+    password: password ?? '',
+    apiKey: apiKey ?? '',
+    accountNumber: (account ?? '').toUpperCase(),
+    problem: undefined,
   };
+  if (email === undefined || password === undefined || apiKey === undefined) {
+    config.problem = 'malformed';
+  } else if (config.apiKey) {
+    if (!API_KEY.test(config.apiKey)) config.problem = 'malformed';
+  } else if (!config.email && !config.password) {
+    config.problem = 'missing';
+  } else if (!config.email || !config.password) {
+    // A password without its e-mail address (or the reverse) is never sent.
+    config.problem = 'half';
+  } else if (!EMAIL.test(config.email)) {
+    config.problem = 'badEmail';
+  }
+  if (!config.problem && account === undefined) config.problem = 'malformed';
+  if (!config.problem && config.accountNumber && !ACCOUNT.test(config.accountNumber)) {
+    config.problem = 'badAccount';
+  }
+  return config;
 }
+
+/** The credentials sent to the login: the API key alone when given. */
+export const credentialsOf = (config) =>
+  config.apiKey ? { apiKey: config.apiKey } : { email: config.email, password: config.password };

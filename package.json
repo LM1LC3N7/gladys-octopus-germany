@@ -1,8 +1,8 @@
 {
-  "name": "gladys-integration-template-js",
-  "version": "1.0.0",
+  "name": "gladys-octopus-germany",
+  "version": "0.1.0",
   "private": true,
-  "description": "Official starter template to build an external integration for Gladys Assistant with the JavaScript SDK.",
+  "description": "Octopus Energy Germany for Gladys Assistant: tariffs (fixed, time-of-use, dynamic), smart-meter consumption and Intelligent Octopus planned charges, read from the official Kraken API with your account. Read-only. Unofficial, not affiliated with Octopus Energy.",
   "type": "module",
   "main": "index.js",
   "scripts": {
@@ -10,10 +10,18 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node --test"
+    "test": "node --test --test-timeout=60000",
+    "audit": "npm audit --omit=dev",
+    "cover": "node scripts/cover.mjs cover.png",
+    "mutants": "node scripts/mutants.mjs",
+    "validate:manifest": "npx --yes github:GladysAssistant/integration-store ."
   },
   "engines": {
     "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LM1LC3N7/gladys-octopus-germany.git"
   },
   "dependencies": {
     "@gladysassistant/integration-sdk": "^0.16.0"

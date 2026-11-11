@@ -1,177 +1,154 @@
 {
   "manifest_version": 1,
   "type": "device",
-  "name": "Demo Devices Template",
+  "name": "Octopus Energy Germany",
   "description": {
-    "en": "Starter template showing sensors, a switch, a dimmable light and a smart plug.",
-    "fr": "Template de démarrage : capteurs, interrupteur, lampe variable et prise connectée."
+    "en": "Unofficial: Octopus Energy Germany tariffs, dynamic prices, smart-meter use, Intelligent Go.",
+    "fr": "Non officiel : tarifs Octopus Energy Allemagne, prix dynamiques, conso du compteur, Intelligent Go."
   },
-  "version": "1.0.0",
-  "docker_image": "ghcr.io/gladysassistant/integration-template-js:1.0.0",
-  "gladys_version": ">=5.1.0",
-  "cover_image": "https://raw.githubusercontent.com/GladysAssistant/integration-template-js/master/cover.png",
-  "categories": ["lighting", "security", "environment"],
-  "transports": ["local", "cloud"],
+  "version": "0.1.0",
+  "docker_image": "ghcr.io/lm1lc3n7/gladys-octopus-germany:0.1.0",
+  "gladys_version": ">=5.2.0",
+  "cover_image": "https://raw.githubusercontent.com/LM1LC3N7/gladys-octopus-germany/main/cover.png",
+  "categories": ["energy"],
+  "transports": ["cloud"],
   "config_schema": [
     {
       "key": "intro",
       "type": "section",
-      "label": { "en": "Getting started", "fr": "Pour commencer" },
+      "label": {
+        "en": "Octopus Energy Germany account",
+        "fr": "Compte Octopus Energy Allemagne"
+      },
       "description": {
-        "en": "The demo weather station reads real data from the free Open-Meteo API: pick the coordinates to observe. No account, no API key.",
-        "fr": "La station météo de démonstration lit de vraies données via l'API gratuite Open-Meteo : choisissez les coordonnées à observer. Pas de compte, pas de clé d'API."
+        "en": "Unofficial connector, not affiliated with Octopus Energy. For Octopus Energy customers in Germany: enter the e-mail address and the password of your Octopus account (the ones of the Octopus website and app). The integration reads your electricity market locations (MaLo), their tariff (fixed, time-of-use such as Intelligent Octopus Go, or dynamic), the smart-meter consumption (iMSys) for the Gladys energy monitoring and the smart charges planned for your Intelligent devices. Read-only: nothing is ever changed on your account. Then create an energy contract from the \"Octopus Energy Germany electricity\" template.",
+        "fr": "Connecteur non officiel, sans lien avec Octopus Energy. Pour les clients d'Octopus Energy en Allemagne : saisissez l'adresse e-mail et le mot de passe de votre compte Octopus (ceux du site et de l'app Octopus). L'intégration lit vos points de livraison d'électricité (MaLo), leur tarif (fixe, à plages horaires comme Intelligent Octopus Go, ou dynamique), la consommation du compteur communicant (iMSys) pour le suivi énergétique de Gladys et les recharges pilotées prévues de vos appareils Intelligent. Lecture seule : rien n'est jamais modifié sur votre compte. Créez ensuite un contrat d'énergie depuis le modèle « Octopus Energy Allemagne électricité »."
       },
       "links": [
         {
-          "url": "https://open-meteo.com/en/docs",
-          "label": { "en": "Open-Meteo documentation", "fr": "Documentation Open-Meteo" }
+          "url": "https://github.com/LM1LC3N7/gladys-octopus-germany/blob/main/docs/fr.md",
+          "label": { "en": "Guide (French)", "fr": "Guide (français)" }
+        },
+        {
+          "url": "https://github.com/LM1LC3N7/gladys-octopus-germany/blob/main/docs/en.md",
+          "label": { "en": "Guide (English)", "fr": "Guide (anglais)" }
+        },
+        {
+          "url": "https://developer.oeg-kraken.energy/",
+          "label": { "en": "The Octopus Germany API", "fr": "L'API d'Octopus Allemagne" }
         }
       ]
     },
     {
-      "key": "latitude",
-      "type": "number",
-      "label": { "en": "Latitude", "fr": "Latitude" },
-      "description": {
-        "en": "Latitude used for the demo weather sensor.",
-        "fr": "Latitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 48.8566", "fr": "ex. 48.8566" },
-      "required": true,
-      "default": 48.8566,
-      "min": -90,
-      "max": 90
-    },
-    {
-      "key": "longitude",
-      "type": "number",
-      "label": { "en": "Longitude", "fr": "Longitude" },
-      "description": {
-        "en": "Longitude used for the demo weather sensor.",
-        "fr": "Longitude utilisée par le capteur météo de démonstration."
-      },
-      "placeholder": { "en": "e.g. 2.3522", "fr": "ex. 2.3522" },
-      "required": true,
-      "default": 2.3522,
-      "min": -180,
-      "max": 180
-    },
-    {
-      "key": "unit",
-      "type": "select",
-      "label": { "en": "Temperature unit", "fr": "Unité de température" },
+      "key": "email",
+      "type": "string",
       "required": false,
-      "default": "celsius",
-      "options": [
-        { "value": "celsius", "label": { "en": "Celsius", "fr": "Celsius" } },
-        { "value": "fahrenheit", "label": { "en": "Fahrenheit", "fr": "Fahrenheit" } }
-      ]
+      "label": { "en": "E-mail address", "fr": "Adresse e-mail" },
+      "description": {
+        "en": "The e-mail address you log in with on the Octopus website.",
+        "fr": "L'adresse e-mail avec laquelle vous vous connectez sur le site d'Octopus."
+      },
+      "placeholder": { "en": "e.g. name@example.com", "fr": "ex. nom@example.com" }
     },
     {
-      "key": "poll_frequency",
-      "type": "number",
-      "label": { "en": "Refresh interval (s)", "fr": "Intervalle de rafraîchissement (s)" },
-      "description": {
-        "en": "How often sensors are polled, in seconds (one minute minimum).",
-        "fr": "Fréquence d'interrogation des capteurs, en secondes (une minute minimum)."
-      },
+      "key": "password",
+      "type": "secret",
       "required": false,
-      "default": 300,
-      "min": 60,
-      "max": 3600
+      "label": { "en": "Password", "fr": "Mot de passe" },
+      "description": {
+        "en": "Kept by Gladys in its database, never shown again, sent only to Octopus Energy Germany (api.oeg-kraken.energy) to log in.",
+        "fr": "Gardé par Gladys dans sa base, jamais réaffiché, envoyé seulement à Octopus Energy Allemagne (api.oeg-kraken.energy) pour se connecter."
+      }
+    },
+    {
+      "key": "api_key",
+      "type": "secret",
+      "required": false,
+      "label": { "en": "API key (optional)", "fr": "Clé d'API (facultative)" },
+      "description": {
+        "en": "Only if Octopus gave you an API key for your account (sk_live_…): used instead of the e-mail address and the password. Kept by Gladys in its database, never shown again, sent only to Octopus Energy Germany.",
+        "fr": "Seulement si Octopus vous a donné une clé d'API pour votre compte (sk_live_…) : utilisée à la place de l'adresse e-mail et du mot de passe. Gardée par Gladys dans sa base, jamais réaffichée, envoyée seulement à Octopus Energy Allemagne."
+      }
+    },
+    {
+      "key": "account_number",
+      "type": "string",
+      "required": false,
+      "label": { "en": "Account number (optional)", "fr": "Numéro de compte (facultatif)" },
+      "description": {
+        "en": "Only needed when your login has several Octopus accounts: empty, the first one is read.",
+        "fr": "Utile seulement si votre connexion a plusieurs comptes Octopus : vide, le premier est lu."
+      },
+      "placeholder": { "en": "e.g. A-1B2C3D4E", "fr": "ex. A-1B2C3D4E" }
     }
   ],
   "actions": [
     {
-      "key": "test_weather",
-      "label": { "en": "Test the weather provider", "fr": "Tester le fournisseur météo" },
-      "timeout_seconds": 30
-    },
-    {
-      "key": "identify",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ]
+      "key": "test_connection",
+      "timeout_seconds": 60,
+      "label": { "en": "Test the connection", "fr": "Tester la connexion" },
+      "description": {
+        "en": "Logs in and lists the accounts of the login (at most once a minute).",
+        "fr": "Se connecte et liste les comptes de la connexion (au plus une fois par minute)."
+      }
     }
   ],
-  "scene_triggers": [
-    {
-      "key": "motion_detected",
-      "label": { "en": "Motion detected", "fr": "Mouvement détecté" },
-      "description": {
-        "en": "A demo motion sensor saw a person or an animal move.",
-        "fr": "Un détecteur de démonstration a vu bouger une personne ou un animal."
-      },
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Sensor", "fr": "Détecteur" }
+  "energy_contracts": {
+    "templates": [
+      {
+        "key": "octopus-de-electricity",
+        "name": {
+          "en": "Octopus Energy Germany electricity",
+          "fr": "Octopus Energy Allemagne électricité"
         },
-        {
-          "key": "target",
-          "type": "multi_select",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" },
-          "options": [
-            { "value": "person", "label": { "en": "Person", "fr": "Personne" } },
-            { "value": "animal", "label": { "en": "Animal", "fr": "Animal" } }
+        "description": {
+          "en": "Your Octopus electricity tariff read from your account (fixed, time-of-use such as Intelligent Octopus Go or Heat, or dynamic): every half hour priced at the unit rate in force then, VAT included, plus the monthly standing charge you enter. A variable §14a grid fee (module 3) is not included.",
+          "fr": "Votre tarif d'électricité Octopus lu depuis votre compte (fixe, à plages horaires comme Intelligent Octopus Go ou Heat, ou dynamique) : chaque demi-heure tarifée au prix du kWh en vigueur, TVA incluse, plus l'abonnement mensuel que vous saisissez. Un tarif de réseau variable §14a (module 3) n'est pas inclus."
+        },
+        "country": "DE",
+        "currency": "EUR",
+        "timezone": "Europe/Berlin",
+        "pricing_mode": "delegated",
+        "version": "2026-11-11",
+        "inputs": [
+          {
+            "key": "malo_suffix",
+            "type": "string",
+            "required": false,
+            "label": {
+              "en": "Last 4 digits of the MaLo (empty: the first one)",
+              "fr": "4 derniers chiffres de la MaLo (vide : la première)"
+            },
+            "description": {
+              "en": "Shown in the name of the device; only needed with several electricity market locations.",
+              "fr": "Visibles dans le nom de l'appareil ; utiles seulement avec plusieurs points de livraison d'électricité."
+            }
+          },
+          {
+            "key": "standing_charge",
+            "type": "number",
+            "unit": "EUR/month",
+            "default": 0,
+            "label": { "en": "Standing charge per month", "fr": "Abonnement par mois" },
+            "description": {
+              "en": "Shown by the \"Standing charge per month\" feature of the device, VAT included.",
+              "fr": "Affiché par la fonctionnalité « Standing charge per month » de l'appareil, TVA incluse."
+            }
+          }
+        ],
+        "tariff": {
+          "tariff_version": 1,
+          "components": [
+            {
+              "key": "standing_charge",
+              "kind": "fixed",
+              "label": "Grundpreis",
+              "amount": "{{input:standing_charge}}",
+              "per": "month"
+            }
           ]
         }
-      ],
-      "variables": [
-        {
-          "key": "target",
-          "type": "string",
-          "label": { "en": "What moved", "fr": "Ce qui a bougé" }
-        }
-      ]
-    }
-  ],
-  "scene_actions": [
-    {
-      "key": "identify_device",
-      "label": { "en": "Identify a device", "fr": "Identifier un appareil" },
-      "description": {
-        "en": "Make a device signal itself (the demo light blinks).",
-        "fr": "Fait se signaler un appareil (la lampe de démonstration clignote)."
-      },
-      "timeout_seconds": 15,
-      "fields": [
-        {
-          "key": "device",
-          "type": "select",
-          "source": "devices",
-          "label": { "en": "Device", "fr": "Appareil" },
-          "required": true
-        }
-      ],
-      "outputs": [
-        {
-          "key": "signalled",
-          "type": "boolean",
-          "label": { "en": "Device signalled", "fr": "Appareil signalé" }
-        }
-      ]
-    }
-  ],
-  "widgets": [
-    {
-      "key": "demo_status",
-      "label": { "en": "Demo status", "fr": "État de la démo" },
-      "description": {
-        "en": "Live temperature and plug power, plug connection and observed location.",
-        "fr": "Température et puissance en direct, connexion de la prise, position observée."
-      },
-      "icon": "activity",
-      "action_timeout_seconds": 15
-    }
-  ]
+      }
+    ]
+  }
 }

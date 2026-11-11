@@ -1,67 +1,158 @@
-# Template de démonstration
+# Octopus Energy Allemagne pour Gladys Assistant
 
-Ceci est la documentation utilisateur de l'intégration. Gladys ré-héberge ce
-fichier et affiche un lien **Documentation** permanent vers lui dans l'écran
-de configuration (dans la langue de l'utilisateur, avec l'anglais en repli) —
-c'est au moment de configurer que l'utilisateur en a le plus besoin. Gardez
-les courtes indications d'accueil dans les blocs `section` du `config_schema`
-du manifest ; mettez ici le pas-à-pas détaillé (captures d'écran, dépannage…).
+Intégration non officielle, sans lien avec Octopus Energy. Elle lit votre
+compte client **Octopus Energy Allemagne** par l'API Kraken officielle
+d'Octopus Allemagne (`api.oeg-kraken.energy`, documentée sur
+developer.oeg-kraken.energy) et donne à Gladys :
 
-## Ce que vous obtenez
+- un appareil par **point de livraison d'électricité (MaLo)** du compte, avec
+  le prix du kWh actuel, le prochain prix, l'abonnement mensuel et, pour un
+  compteur communicant (iMSys), la consommation par demi-heure pour le suivi
+  énergétique ;
+- un appareil par **appareil Intelligent Octopus** (voiture, borne) avec
+  « Smart charge planned now » (recharge pilotée prévue maintenant) ;
+- un modèle de contrat d'énergie, **Octopus Energy Allemagne électricité**,
+  tarifé depuis le tarif de votre compte : fixe, à plages horaires
+  (Intelligent Octopus Go, Heat…) ou dynamique.
 
-Six appareils de démonstration apparaissent après l'installation : une
-station météo (vraies données Open-Meteo), un interrupteur, une lampe
-variable, une prise connectée avec mesure de puissance, un détecteur de
-mouvement et une caméra.
+**Lecture seule.** La seule requête qui n'est pas une lecture est la
+connexion. Rien n'est jamais modifié sur votre compte, vos compteurs ou vos
+appareils (ni recharge pilotée, ni boost, ni relevé envoyé).
 
-## Configuration
+> Cette intégration n'a jamais été testée avec un vrai compte Octopus
+> Allemagne : elle a été écrite d'après le schéma publié de l'API et les
+> requêtes d'octopus_germany (Home Assistant, MIT). Dites-nous ce que vous
+> voyez.
 
-1. Ouvrez l'onglet **Configuration** de l'intégration.
-2. Renseignez la **latitude** et la **longitude** que la station météo de
-   démonstration doit observer (Paris par défaut), et choisissez votre unité
-   de température. L'**intervalle de rafraîchissement** règle la fréquence
-   de lecture de la station météo et de la puissance de la prise : toutes
-   les 5 minutes par défaut, toutes les minutes au plus.
-3. Enregistrez : les appareils apparaissent dans l'onglet **Découverte**,
-   prêts à être ajoutés.
+## Mise en route
 
-Le réglage **Préférer la connexion locale** pilote la prise de
-démonstration : elle affiche en badge le canal réellement utilisé (local ou
-cloud), avec un point orange quand elle fonctionne en mode dégradé (local
-refusé, bascule cloud).
+1. Saisissez l'**adresse e-mail** et le **mot de passe** de votre compte
+   Octopus (ceux du site et de l'app Octopus). Le mot de passe est gardé par
+   Gladys dans sa base, jamais réaffiché, et envoyé seulement à Octopus
+   Allemagne pour se connecter. L'intégration garde le jeton Kraken en
+   mémoire seulement.
+2. Si Octopus vous a donné une **clé d'API** pour votre compte (`sk_live_…`),
+   vous pouvez la saisir à la place : elle est alors utilisée seule.
+3. Avec plusieurs comptes sur une même connexion, saisissez le **numéro de
+   compte** à lire (vide : le premier ; le statut le signale).
+4. Appuyez sur **Tester la connexion** (au plus une fois par minute) : elle
+   se connecte et compte vos comptes.
+5. Dans **Découverte**, ajoutez les appareils voulus. Rien n'est demandé à
+   Octopus pour un appareil que personne n'a ajouté (consommation, recharges
+   prévues).
+6. Dans les réglages énergie de Gladys, créez un contrat depuis le modèle
+   **Octopus Energy Allemagne électricité** sur votre compteur : saisissez les
+   4 derniers chiffres de la MaLo (visibles dans le nom de l'appareil ; vide :
+   la première) et votre abonnement mensuel (affiché par la fonctionnalité
+   « Standing charge per month », TVA incluse).
 
-## Actions
+## Appareils
 
-- **Tester le fournisseur météo** — effectue une requête en direct vers
-  Open-Meteo et affiche la température et l'humidité actuelles sous le
-  bouton.
-- **Identifier un appareil** — choisissez un de vos appareils dans la liste
-  et il se signale (la lampe de démonstration « clignote » dans les logs).
+| Appareil                         | Fonctionnalité            | Sens                                                           |
+| -------------------------------- | ------------------------- | -------------------------------------------------------------- |
+| Octopus electricity (MaLo …1234) | Price per kWh now         | prix TTC du kWh, EUR/kWh                                       |
+|                                  | Next price per kWh        | le prochain prix différent, sous 2 jours                       |
+|                                  | Standing charge per month | abonnement TTC, EUR, de votre contrat                          |
+|                                  | Consumption (30 min)      | compteur communicant (iMSys) seulement, kWh, datée par Octopus |
+| Octopus Intelligent …            | Smart charge planned now  | 1 pendant une recharge prévue, 0 sinon                         |
 
-## Scènes
+L'**identifiant de l'appareil** est une empreinte du numéro de MaLo
+(16 chiffres hexadécimaux) : le numéro de MaLo lui-même n'apparaît jamais
+dans un identifiant, un journal, le statut ni `/data` ; le nom de l'appareil
+en montre les 4 derniers chiffres. C'est la MaLo, pas le compteur, qui fait
+l'identité : un compteur remplacé garde son appareil Gladys et son
+historique.
 
-L'intégration ajoute ses propres cartes à l'éditeur de scènes (Gladys 5.1
-ou plus récent), dans la catégorie **Intégrations** :
+Une valeur qu'Octopus ne donne pas reste inconnue : rien n'est jamais publié
+comme 0 à sa place. Les prix sont republiés à chaque quart d'heure d'après ce
+qui a été lu ; un tarif lu il y a plus de 6 heures n'est plus publié comme
+actuel.
 
-- **Mouvement détecté** (déclencheur) — lance la scène quand un détecteur
-  de démonstration voit bouger quelque chose. Choisissez éventuellement le
-  détecteur et ce qui a bougé (personne, animal) ; laissés vides, toute
-  détection correspond. Les actions suivantes peuvent lire ce qui a bougé
-  avec `{{triggerEvent.data.target}}`.
-- **Identifier un appareil** (action) — fait se signaler l'appareil choisi.
-  Elle indique si l'appareil a pu se signaler, pour que les actions
-  suivantes puissent en dépendre.
+## Rythme
 
-## Tableau de bord
+- le compte (tarifs, prix dynamiques à venir, appareils) : toutes les heures ;
+- la consommation des compteurs ajoutés : toutes les 3 heures, les 3
+  derniers jours ; 7 jours pour un nouvel appareil et une fois par jour après
+  6 h (heure allemande) ;
+- les recharges prévues des appareils Intelligent ajoutés : toutes les
+  15 minutes.
 
-Ajoutez le widget **État de la démo** à un tableau de bord : il affiche en
-direct la température de la station météo et la puissance de la prise du
-bureau, la connexion utilisée par la prise (en orange si dégradée) et la
-position observée. Son bouton **Identifier la lampe** fait se signaler la
-lampe de démonstration.
+Chaque heure est notée dans `/data` avant la requête : un redémarrage, une
+reconnexion ou la Découverte n'avancent jamais une lecture, et le bouton de
+test ne fait que se connecter et lister les comptes (au plus une fois par
+minute). Deux exceptions, au plus tôt une minute après la lecture précédente :
+une autre connexion ou un autre numéro de compte enregistrés dans le
+formulaire (le compte), un appareil de compteur qui vient d'être ajouté (sa
+consommation). Les requêtes partent une à la fois, à 2 secondes d'intervalle.
 
-## Dépannage
+## Le contrat d'énergie
 
-L'intégration journalise tout ce qu'elle fait : consultez les logs de
-l'intégration depuis l'interface Gladys (ou `docker logs` sur l'hôte) avec
-`LOG_LEVEL=debug` pour le détail complet.
+Le modèle est **tarifé par l'intégration** (délégué) : Gladys envoie la
+consommation par demi-heure, l'intégration en répond le coût :
+
+- le prix d'une demi-heure est la moyenne de ses deux quarts d'heure, TVA
+  incluse, d'après le contrat en vigueur à ce moment (un changement de tarif
+  en cours de mois est bien tarifé) ;
+- **tarif dynamique** : le prix de la prévision d'Octopus pour ce quart
+  d'heure, rien d'autre ; **à plages horaires** (Intelligent Octopus Go : de
+  0 h à 5 h, heure allemande) : le prix de la plage, changements d'heure
+  compris ; **fixe** : le prix, dans les dates qu'Octopus lui donne ;
+- un prix négatif coûte 0 (Gladys ne prend pas de crédit) ;
+- un prix inconnu n'est jamais un 0 : la demi-heure reste sans coût et
+  Gladys redemande plus tard.
+
+Les prix dynamiques ne sont connus qu'à l'avance : l'intégration garde dans
+`/data` chaque prix vu pendant 40 jours, pour tarifer le passé. **Faites
+commencer le contrat le jour de l'installation de l'intégration** (ou plus
+tard) : une demi-heure antérieure n'a pas de prix dynamique connu et resterait
+sans coût.
+
+Non inclus : un tarif de réseau variable §14a (module 3), qu'Octopus facture
+en plus aux clients qui l'ont choisi. L'abonnement est le montant saisi dans
+le contrat (Gladys le calcule, pas l'intégration).
+
+## Statut et erreurs
+
+| Statut                                                   | Sens                                                     | Ce qui se passe                                                              |
+| -------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| Octopus a refusé la connexion (KT-CT-1138, 1134 ou 1135) | e-mail ou mot de passe faux                              | aucune requête tant que vous ne les changez pas ou que Tester ne réussit pas |
+| L'accès à l'API n'est pas activé (KT-CT-11334)           | Octopus a désactivé l'accès à l'API pour cet utilisateur | idem                                                                         |
+| Octopus bloque la connexion pour le moment (KT-CT-1136)  | blocage passager, vu avec des identifiants valides       | pause d'1 heure, doublée jusqu'à 6 heures                                    |
+| Octopus a demandé de ralentir                            | HTTP 429 ou KT-CT-1199                                   | pause de Retry-After ou 15 minutes, doublée jusqu'à 6 heures                 |
+| Octopus a un problème                                    | HTTP 5xx ou KT-CT-7899                                   | pause de 5 minutes, doublée jusqu'à 6 heures                                 |
+| Octopus n'a pas pu être lu                               | réseau, délai, réponse illisible, requête refusée        | nouvel essai après 5, 10, 20, 40 puis toutes les 60 minutes                  |
+
+Un 401 ou 403 répondu à une requête (pas à la connexion) n'est jamais pris
+pour un mot de passe refusé : une nouvelle connexion, puis une erreur
+passagère. Les pauses et le refus sont gardés dans `/data` (le refus comme
+8 bits d'une empreinte salée des identifiants, jamais les identifiants).
+
+**La nouvelle connexion d'Octopus.** Octopus a marqué comme dépréciée en 2026
+la connexion par e-mail et mot de passe de son API. Si le site accepte votre
+mot de passe mais que l'intégration le dit refusé, votre compte utilise
+peut-être la nouvelle connexion : une clé d'API du compte fonctionne encore
+(demandez-en une à Octopus).
+
+## Ce que contient `/data`
+
+`/data/octopus-germany.json` : l'heure des dernières lectures, la pause, le
+refus (8 bits d'une empreinte salée), les MaLo vues (empreinte, 4 derniers
+chiffres, nom du tarif, compteur communicant ou non) et les prix des 40
+derniers jours. Jamais l'adresse e-mail, le mot de passe, un jeton, le numéro
+de compte ni un numéro de MaLo complet.
+
+## Limites
+
+- Électricité seulement : le gaz, l'injection (export) et le solde du compte
+  ne sont pas lus.
+- Les recharges prévues d'Intelligent Octopus ne changent pas le prix calculé
+  ici : ce sont les plages horaires du tarif qui comptent.
+- Jamais testée avec un vrai compte (voir plus haut) : les réponses sont lues
+  strictement, et une réponse de forme inattendue est une erreur passagère,
+  jamais une valeur fausse.
+
+## Crédits
+
+Les requêtes GraphQL sont adaptées d'octopus_germany de thecem (MIT,
+github.com/thecem/octopus_germany), comme la lecture des tarifs et des
+mesures, réécrite en JavaScript. Notice dans `THIRD_PARTY_NOTICES.md`.

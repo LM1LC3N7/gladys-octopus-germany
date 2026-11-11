@@ -1,0 +1,206 @@
+[
+  {
+    "name": "any login error is a refusal",
+    "file": "src/kraken/client.js",
+    "from": "if (primary && err.kt && (REFUSED.has(err.kt) || err.kt === API_ACCESS)) {",
+    "to": "if (primary) {"
+  },
+  {
+    "name": "a query 401 taken as a refusal",
+    "file": "src/kraken/client.js",
+    "from": "if (status === 401 || status === 403) {\n    throw new KrakenError('unauthorized', { status, kt: ktOf(errors) });",
+    "to": "if (status === 401 || status === 403) {\n    throw new KrakenError('refused', { status, kt: ktOf(errors) });"
+  },
+  {
+    "name": "KT-CT-1136 not a pause",
+    "file": "src/kraken/client.js",
+    "from": "if (primary && err.kt === LOGIN_BLOCKED) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "body read whole",
+    "file": "src/kraken/client.js",
+    "from": "    if (size > max) {",
+    "to": "    if (false) {"
+  },
+  {
+    "name": "no gap between requests",
+    "file": "src/kraken/client.js",
+    "from": "if (wait > 0 && this.sleep) await this.sleep(wait);",
+    "to": ""
+  },
+  {
+    "name": "token never renewed",
+    "file": "src/kraken/client.js",
+    "from": "if (!this.token || this.monotonic() >= this.tokenDue) {",
+    "to": "if (!this.token) {"
+  },
+  {
+    "name": "password at every renewal",
+    "file": "src/kraken/client.js",
+    "from": "if (this.refreshToken && mono < this.refreshDue) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "no new login on an expired token",
+    "file": "src/kraken/client.js",
+    "from": "if (err.code !== 'expired' && !(err.code === 'unauthorized' && err.status === 401)) {",
+    "to": "if (true) {"
+  },
+  {
+    "name": "dynamic priced from its fixed rate",
+    "file": "src/kraken/model.js",
+    "from": "    return a.forecast.find((f) => f.from <= t && t < f.to)?.price;",
+    "to": "    return a.forecast.find((f) => f.from <= t && t < f.to)?.price ?? rateAt(a.rate, t);"
+  },
+  {
+    "name": "revoked agreement kept",
+    "file": "src/kraken/model.js",
+    "from": "if (a?.isRevoked === true) return undefined;",
+    "to": ""
+  },
+  {
+    "name": "another MaLo's quarters taken",
+    "file": "src/kraken/model.js",
+    "from": "if (f?.marketSupplyPointId && f.marketSupplyPointId !== malo) continue;",
+    "to": ""
+  },
+  {
+    "name": "export taken as consumption",
+    "file": "src/kraken/model.js",
+    "from": "if (EXPORT.has(String(f?.readingDirection ?? '').toUpperCase())) continue;",
+    "to": ""
+  },
+  {
+    "name": "negative quarter taken",
+    "file": "src/kraken/model.js",
+    "from": "if (kwh < 0 || kwh > MAX_QUARTER_KWH) continue;",
+    "to": "if (kwh > MAX_QUARTER_KWH) continue;"
+  },
+  {
+    "name": "conflicting quarters kept",
+    "file": "src/kraken/model.js",
+    "from": "      into.conflicts.add(start);",
+    "to": "      into.quarters.set(start, kwh);"
+  },
+  {
+    "name": "half-hour with one quarter",
+    "file": "src/kraken/model.js",
+    "from": "if (a === undefined || b === undefined || t + HALF_HOUR > now) continue;",
+    "to": "if (a === undefined || t + HALF_HOUR > now) continue;"
+  },
+  {
+    "name": "half-hour not elapsed published",
+    "file": "src/kraken/model.js",
+    "from": "if (a === undefined || b === undefined || t + HALF_HOUR > now) continue;",
+    "to": "if (a === undefined || b === undefined) continue;"
+  },
+  {
+    "name": "price bound removed",
+    "file": "src/kraken/model.js",
+    "from": "return Math.abs(eur) <= MAX_PRICE ? Math.round(eur * 1e6) / 1e6 : undefined;",
+    "to": "return Math.round(eur * 1e6) / 1e6;"
+  },
+  {
+    "name": "a /data time in the future taken",
+    "file": "src/app.js",
+    "from": "        data[key] <= now &&\n",
+    "to": ""
+  },
+  {
+    "name": "attempt not kept before the read",
+    "file": "src/app.js",
+    "from": "    this.data.lastAccount = this.now();\n    await this.save();",
+    "to": "    await this.save();\n    this.data.lastAccount = this.now();"
+  },
+  {
+    "name": "pause ignored by the schedule",
+    "file": "src/app.js",
+    "from": "if (this.pause) due = Math.max(due, this.pause.due);",
+    "to": ""
+  },
+  {
+    "name": "refusal ignored by the schedule",
+    "file": "src/app.js",
+    "from": "if (!this.session || this.isRefused()) {",
+    "to": "if (!this.session) {"
+  },
+  {
+    "name": "refusal kept after new credentials",
+    "file": "src/app.js",
+    "from": "if (changed && this.credKey !== undefined && this.refused) {",
+    "to": "if (false) {"
+  },
+  {
+    "name": "unreadable /data: read at once",
+    "file": "src/app.js",
+    "from": "if (this.storeState !== 'ok') return mono + interval;",
+    "to": ""
+  },
+  {
+    "name": "unreadable /data written over",
+    "file": "src/app.js",
+    "from": "    if (this.storeState !== 'ok') return false;",
+    "to": ""
+  },
+  {
+    "name": "stale prices published",
+    "file": "src/app.js",
+    "from": "      this.monotonic() - this.accountOkMono > PRICES_MAX_AGE",
+    "to": "      false"
+  },
+  {
+    "name": "stale planned charges published",
+    "file": "src/app.js",
+    "from": "!held || mono - held.at > HOUR) continue;",
+    "to": "!held) continue;"
+  },
+  {
+    "name": "unknown price priced as 0",
+    "file": "src/app.js",
+    "from": "!Number.isFinite(t0) || p1 === undefined || p2 === undefined || !finite(kwh) || kwh < 0",
+    "to": "!Number.isFinite(t0) || !finite(kwh) || kwh < 0"
+  },
+  {
+    "name": "negative cost",
+    "file": "src/app.js",
+    "from": "const cost = Math.max(0, (kwh * (p1 + p2)) / 2);",
+    "to": "const cost = (kwh * (p1 + p2)) / 2;"
+  },
+  {
+    "name": "next price unknown published as current",
+    "file": "src/app.js",
+    "from": "nextPrice: next ? next.price : price,",
+    "to": "nextPrice: next?.price ?? price,"
+  },
+  {
+    "name": "test button not limited",
+    "file": "src/app.js",
+    "from": "mono - this.lastTest < TEST_MIN_GAP",
+    "to": "false"
+  },
+  {
+    "name": "test button ignores the pause",
+    "file": "src/app.js",
+    "from": "if (this.pauseActive(mono)) return both('testPaused', { time: clock(this.pause.until) });",
+    "to": ""
+  },
+  {
+    "name": "consumption of devices nobody created",
+    "file": "src/app.js",
+    "from": "(m) =>\n        m.smart &&\n        this.created.has(",
+    "to": "(m) =>\n        m.smart ||\n        this.created.has("
+  },
+  {
+    "name": "config changes read at once",
+    "file": "src/app.js",
+    "from": "    const wait = this.freshConfig\n      ? CREATED_MIN_GAP",
+    "to": "    const wait = this.freshConfig\n      ? 0"
+  },
+  {
+    "name": "ambiguous MaLo suffix guessed",
+    "file": "src/app.js",
+    "from": "return matches.length === 1 ? matches[0] : undefined;",
+    "to": "return matches[0];"
+  }
+]

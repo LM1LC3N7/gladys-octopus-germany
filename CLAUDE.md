@@ -11,16 +11,26 @@ Gladys through
 [`@gladysassistant/integration-sdk`](https://github.com/GladysAssistant/integration-sdk-js),
 its only runtime dependency. It started from the official JavaScript template.
 
+It reads **Octopus Energy Germany** through the official Kraken GraphQL API
+(`api.oeg-kraken.energy/v1/graphql/`, login by `obtainKrakenToken` with the
+customer's e-mail and password, or an API key): the electricity market
+locations (MaLo), their agreements and unit rates (fixed, time-of-use,
+dynamic forecast), the smart-meter quarters, the Intelligent devices and
+their planned charges. **Read-only**: the login is the only mutation.
+Unofficial: not affiliated with Octopus Energy. Sibling of
+gladys-octopus-energy (Great Britain).
+
 ## Commands
 
 ```bash
 npm install
 npm test                                  # node --test, the built-in runner
-node --test test/devices.test.js          # one file
-node --test --test-name-pattern "plug"    # tests whose name matches
+node --test test/model.test.js            # one file
+node --test --test-name-pattern "Go"      # tests whose name matches
 npm run lint                              # ESLint
 npm run format:check                      # Prettier, as the CI runs it
 npm run format                            # Prettier, fix in place
+npm run mutants                           # mutation check (scripts/mutants.json), use memcap
 npx github:GladysAssistant/integration-store .   # store admission checks
 ```
 
@@ -31,20 +41,38 @@ pushing.
 ## Architecture
 
 ```
-index.js                          SDK wiring only: handlers registered before connect()
-src/devices/index.js              registry of the device blueprints + dispatch helpers
-src/devices/<type>.js             one device type per file (buildDevice, onPoll, onSetValue...)
-src/scenes.js                     scene action handlers (manifest `scene_actions`)
-src/widgets.js                    dashboard widget handlers (manifest `widgets`)
-src/config.js                     DEFAULT_CONFIG (mirrors the manifest defaults) + normalization
-src/weather.js                    example driver (Open-Meteo)
-gladys-assistant-integration.json manifest: name, config_schema, actions, image...
+index.js                          SDK wiring only (src/handlers.js registers the handlers)
+src/handlers.js                   the SDK handlers, shared with the tests
+src/app.js                        OctopusApp: pace, /data, account, consumption, planned
+                                  charges, price features, delegated pricing, status, test
+src/kraken/client.js              the only network access: POST GraphQL, login, token, errors
+src/kraken/queries.js             the GraphQL documents (read-only, the login apart)
+src/kraken/model.js               answers -> MaLos, agreements, prices, quarters (pure)
+src/devices.js                    the devices, feature keys, states (pure)
+src/time.js                       local time of Germany (Europe/Berlin), pure
+src/config.js                     the form, normalized
+src/store.js                      /data/octopus-germany.json
+src/constants.js                  endpoint, pace, bounds, manifest keys
+src/i18n.js                       runtime texts (en/fr)
+gladys-assistant-integration.json manifest: config, action, energy contract template
 docs/en.md, docs/fr.md            user documentation, re-hosted by Gladys (mandatory)
-test/                             node --test, against the SDK's fake Gladys (integration-sdk/testing)
-.github/scripts/release.mjs       release helpers (manifest bump, changelog), tested in test/
+test/                             node --test, against the SDK's fake Gladys
+scripts/                          cover.png generator, mutation runner and list
 ```
 
 ## Rules
+
+- **Octopus keys are forever too**: the external ids `malo:<hash>` and
+  `flex:<hash>` (16 hex of a SHA-256 of the MaLo / Kraken device id, see
+  `keyOf`), the `FEATURE` keys of `src/devices.js`, the template key
+  `octopus-de-electricity` and its inputs `malo_suffix`, `standing_charge`.
+- **Never the MaLo number, the e-mail, the password, a token or the account
+  number** in a log, the status, an error message, an id or `/data`.
+- **Read-only**: never add a mutation besides `obtainKrakenToken` without an
+  option disabled by default (and never as a `switch`).
+- **Be polite with Octopus**: account hourly, consumption every 3 h, planned
+  charges every 15 min, one request at a time, 2 s apart; every time kept in
+  /data before the request.
 
 - **External ids are forever.** Build them with
   `gladys.externalIds(type, platformId)`, `platformId` being the unique id the
