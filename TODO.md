@@ -2,15 +2,15 @@
 
 ## Before announcing
 
-- [ ] Test on a real Gladys 5.2+ with a real Octopus Germany account: login,
+- [ ] Test on a real Gladys 5.3+ with a real Octopus Germany account: login,
       Discovery, the 7-day consumption backfill, the price features over a
       day, a contract priced (fixed, Go, dynamic), the Intelligent device.
 - [ ] Turn on "Private vulnerability reporting" (SECURITY.md points there).
 - [ ] Add the `gladys-assistant-integration` topic to publish in the store
       (after the first release: the store validator needs the GHCR image).
-- [ ] Store fields left out of the manifest on purpose (Louis' rule):
-      `countries: ["DE"]`, keywords `octopus`, `kraken`,
-      `dynamischer Stromtarif`, `Intelligent Octopus Go`.
+- [ ] Store fields left out of the manifest on purpose (Louis' rule): keywords
+      `octopus`, `kraken`, `dynamischer Stromtarif`, `Intelligent Octopus Go`.
+      The countries are declared (`DE`).
 
 ## To confirm on a real account (built without one)
 
@@ -42,9 +42,9 @@
 
 - **Version 0.1.0** set by hand (package, lock, manifest, image tag) when
   leaving the template; the Release workflow owns it from now on.
-- **`gladys_version: ">=5.2.0"`**, not 5.1.0: `publishEnergyConsumption`
-  (POST /energy/consumption) and the energy contracts arrived in Gladys
-  5.2.0, as for gladys-octopus-energy.
+- **`gladys_version: ">=5.3.0"`**: the catalog `countries` arrived in Gladys
+  5.3.0; `publishEnergyConsumption` (POST /energy/consumption) and the energy
+  contracts in 5.2.0, as for gladys-octopus-energy.
 - **Read-only (v1)**: no smart-charge control, no boost, no meter reading
   submitted, no preference changed. The only mutation is the login.
 - **One delegated template, no calendar.** The price of a customer depends on
